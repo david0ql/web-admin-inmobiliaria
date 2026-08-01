@@ -270,6 +270,107 @@ export interface PropertyLabel {
   color: string;
 }
 
+export type FamilyKind = 'PROJECT' | 'COMPLEX' | 'BUILDING' | 'STAGE';
+export type FamilyStatus = 'PLANNED' | 'UNDER_CONSTRUCTION' | 'DELIVERED' | 'SOLD_OUT';
+
+export interface PropertyFamily {
+  id: string;
+  name: string;
+  slug: string;
+  kind: FamilyKind;
+  status: FamilyStatus;
+  description: string | null;
+  developer: string | null;
+  city: City | null;
+  cityId: number | null;
+  zone: Zone | null;
+  zoneId: number | null;
+  address: string | null;
+  deliveryYear: number | null;
+  totalUnits: number | null;
+  coverUrl: string | null;
+  published: boolean;
+  parentId: string | null;
+  children?: PropertyFamily[];
+  createdAt: string;
+}
+
+export interface UnitTypeSummary {
+  unitType: string | null;
+  propertyType: string;
+  units: number;
+  available: number;
+  minArea: number | null;
+  maxArea: number | null;
+  bedrooms: number | null;
+  minPrice: number | null;
+  maxPrice: number | null;
+}
+
+export type ConsignmentStatus =
+  | 'NEW'
+  | 'REVIEWING'
+  | 'VISIT_SCHEDULED'
+  | 'ACCEPTED'
+  | 'REJECTED';
+
+export interface ConsignmentFile {
+  kind: 'DOCUMENT' | 'PHOTO';
+  storageKey: string;
+  url: string;
+  originalName: string;
+  bytes: number;
+}
+
+export interface ConsignmentRequest {
+  id: string;
+  reference: string;
+  status: ConsignmentStatus;
+  cityId: number | null;
+  cityName: string;
+  commune: string | null;
+  neighborhood: string;
+  complexName: string;
+  address: string;
+  unitNumber: string;
+  stratum: number;
+  propertyTypeId: number | null;
+  propertyTypeName: string;
+  floor: string | null;
+  view: 'NORTH' | 'SOUTH' | 'EAST' | 'WEST' | null;
+  hasElevator: boolean;
+  condition: string;
+  privateArea: string | null;
+  builtArea: string;
+  lotArea: string | null;
+  bedrooms: number;
+  bathrooms: number;
+  parkingSpaces: number;
+  hasStorageRoom: boolean;
+  buildingYear: number;
+  amenityIds: number[];
+  amenitiesOther: string | null;
+  maintenanceFee: string;
+  salePrice: string;
+  creditType: 'MORTGAGE' | 'LEASING' | 'DEBT_FREE';
+  creditInstitution: string | null;
+  debtAmount: string | null;
+  occupancy: 'RENTED' | 'VACANT' | 'OWNER_OCCUPIED';
+  rentAmount: string | null;
+  leaseEndsOn: string | null;
+  ownerFirstName: string;
+  ownerLastName: string;
+  ownerEmail: string;
+  ownerPhone: string;
+  notes: string | null;
+  files: ConsignmentFile[];
+  requestedVisitAt: string | null;
+  propertyId: string | null;
+  clientId: string | null;
+  resolution: string | null;
+  createdAt: string;
+}
+
 export interface Property {
   id: string;
   code: string;
@@ -306,6 +407,9 @@ export interface Property {
   tourUrl: string | null;
   assignedAgent: Agent | null;
   assignedAgentId: string | null;
+  family: PropertyFamily | null;
+  familyId: string | null;
+  unitType: string | null;
   images: PropertyImage[];
   features?: Feature[];
   createdAt: string;

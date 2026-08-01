@@ -6,6 +6,7 @@ import {
   type Agent,
   type Catalogs,
   type Property,
+  type PropertyFamily,
   type PropertyInterest,
   type Publication,
 } from '../lib/api';
@@ -39,6 +40,8 @@ interface Detail {
   property: Property;
   interests: PropertyInterest[];
   publications: Publication[];
+  /** Otras unidades del mismo proyecto: mismo sitio, otra medida. */
+  siblings: Property[];
 }
 
 export function PropertyDetail() {
@@ -47,18 +50,20 @@ export function PropertyDetail() {
   const { can } = useAuth();
   const [assigning, setAssigning] = useState(false);
   const [publishing, setPublishing] = useState(false);
+  const [linkingFamily, setLinkingFamily] = useState(false);
   const [uploading, setUploading] = useState(false);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const fileInput = useRef<HTMLInputElement>(null);
 
   const { data, error, loading, reload } = useFetch<Detail>(
     async (signal) => {
-      const [property, interests, publications] = await Promise.all([
+      const [property, interests, publications, siblings] = await Promise.all([
         api.get<Property>(`/properties/${id}`, undefined, signal),
         api.get<PropertyInterest[]>(`/properties/${id}/interests`, undefined, signal),
         api.get<Publication[]>(`/properties/${id}/publications`, undefined, signal),
+        api.get<Property[]>(`/properties/${id}/siblings`, undefined, signal),
       ]);
-      return { property, interests, publications };
+      return { property, interests, publications, siblings };
     },
     [id],
   );
@@ -72,7 +77,7 @@ export function PropertyDetail() {
     );
   }
 
-  const { property, interests, publications } = data;
+  const { property, interests, publications, siblings } = data;
 
   /**
    * Sube fotos al servidor propio. Van en `multipart/form-data` porque el
@@ -138,7 +143,10 @@ export function PropertyDetail() {
               </a>
             )}
             {can('ADMIN', 'MANAGER') && (
-              <Button onClick={() => setAssigning(true)}>Reasignar</Button>
+              <>
+                <Button onClick={() => setLinkingFamily(true)}>Proyecto</Button>
+                <Button onClick={() => setAssigning(true)}>Reasignar</Button>
+              </>
             )}
             {editable && (
               <Button variant="primary" onClick={() => navigate(`/inmuebles/${id}/editar`)}>
@@ -315,6 +323,14 @@ export function PropertyDetail() {
                     <Row label="Visitas web" value={number(property.visits)} />
                     <Row label="Alta" value={date(property.createdAt)} />
                     <Row
+                      label="Proyecto"
+                      value={
+                        property.family
+                          ? `${property.family.name}${property.unitType ? ` · ${property.unitType}` : ''}`
+                          : 'Suelto'
+                      }
+                    />
+                    <Row
                       label="Asesor"
                       value={
                         property.assignedAgent
@@ -376,6 +392,46 @@ export function PropertyDetail() {
               )}
             </Card>
 
+            {property.family && (
+              <Card
+                title={`Otras unidades de ${property.family.name}`}
+                action={
+                  <Link to={`/proyectos/${property.familyId}`} className="btn btn-sm btn-ghost">
+                    Ver proyecto
+                  </Link>
+                }
+                flush
+              >
+                {siblings.length === 0 ? (
+                  <Empty title="Es la única unidad">
+                    Cuando asignes más inmuebles a este proyecto aparecerán aquí para comparar.
+                  </Empty>
+                ) : (
+                  <div className="table-wrap">
+                    <table className="data">
+                      <tbody>
+                        {siblings.map((sibling) => (
+                          <tr key={sibling.id}>
+                            <td className="figure" style={{ width: 88 }}>
+                              <Link to={`/inmuebles/${sibling.id}`}>{sibling.code}</Link>
+                            </td>
+                            <td>
+                              {sibling.unitType ?? sibling.propertyType.name}
+                              <div className="note" style={{ marginTop: 2 }}>
+                                {sibling.bedrooms ?? '—'} alcobas · piso {sibling.floor ?? '—'}
+                              </div>
+                            </td>
+                            <td className="num">{area(sibling.area)}</td>
+                            <td className="num">{money(sibling.salePrice)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </Card>
+            )}
+
             <Card title={`Clientes vinculados · ${interests.length}`} flush>
               {interests.length === 0 ? (
                 <Empty title="Nadie interesado todavía">
@@ -420,6 +476,19 @@ export function PropertyDetail() {
           onClose={() => setAssigning(false)}
           onDone={() => {
             setAssigning(false);
+            reload();
+          }}
+        />
+      )}
+
+      {linkingFamily && (
+        <FamilyModal
+          propertyId={id}
+          currentFamilyId={property.familyId}
+          currentUnitType={property.unitType}
+          onClose={() => setLinkingFamily(false)}
+          onDone={() => {
+            setLinkingFamily(false);
             reload();
           }}
         />
@@ -593,6 +662,106 @@ function PublishModal({
             {!portal.connected && <Badge tone="red">sin conectar</Badge>}
           </label>
         ))}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Vincula el inmueble a un proyecto.
+ *
+ * La tipologia se pide aqui mismo porque es lo que hace util el agrupamiento:
+ * sin ella, veinte apartamentos del mismo conjunto siguen siendo veinte fichas
+ * sueltas en vez de "Tipo A, 3 alcobas, 78-84 m²".
+ */
+function FamilyModal({
+  propertyId,
+  currentFamilyId,
+  currentUnitType,
+  onClose,
+  onDone,
+}: {
+  propertyId: string;
+  currentFamilyId: string | null;
+  currentUnitType: string | null;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const families = useFetch<PropertyFamily[]>(
+    (signal) => api.get<PropertyFamily[]>('/families', undefined, signal),
+    [],
+  );
+  const [familyId, setFamilyId] = useState(currentFamilyId ?? '');
+  const [unitType, setUnitType] = useState(currentUnitType ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/properties/${propertyId}/family`, {
+        familyId: familyId || null,
+        unitType: unitType.trim() || undefined,
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo asignar el proyecto.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title="Proyecto del inmueble"
+      onClose={onClose}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="primary" loading={busy} onClick={() => void save()}>
+            Guardar
+          </Button>
+        </>
+      }
+    >
+      <div className="stack">
+        {error && <div className="alert">{error}</div>}
+
+        <SelectField
+          label="Proyecto"
+          value={familyId}
+          onChange={(e) => setFamilyId(e.target.value)}
+          hint="Déjalo sin proyecto si es un inmueble suelto"
+        >
+          <option value="">Sin proyecto</option>
+          {(families.data ?? []).map((family) => (
+            <option key={family.id} value={family.id}>
+              {family.parentId ? '   └ ' : ''}
+              {family.name}
+            </option>
+          ))}
+        </SelectField>
+
+        <label className="field">
+          <span>Tipología</span>
+          <input
+            className="input"
+            value={unitType}
+            onChange={(e) => setUnitType(e.target.value)}
+            placeholder="Tipo A"
+            disabled={!familyId}
+          />
+          <span className="field-hint">
+            Agrupa las unidades iguales dentro del proyecto.
+          </span>
+        </label>
+
+        {(families.data ?? []).length === 0 && (
+          <div className="alert alert-warn">
+            Todavía no hay proyectos creados. Créalos en Proyectos y vuelve aquí.
+          </div>
+        )}
       </div>
     </Modal>
   );

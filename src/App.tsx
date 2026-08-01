@@ -5,6 +5,9 @@ import { Login } from './pages/Login';
 import { ChangePassword } from './pages/ChangePassword';
 import { Dashboard } from './pages/Dashboard';
 import { Properties } from './pages/Properties';
+import { Projects } from './pages/Projects';
+import { ProjectDetail } from './pages/ProjectDetail';
+import { Consignments } from './pages/Consignments';
 import { PropertyDetail } from './pages/PropertyDetail';
 import { PropertyForm } from './pages/PropertyForm';
 import { Clients } from './pages/Clients';
@@ -51,6 +54,9 @@ export default function App() {
             <Route path="inmuebles/nuevo" element={<PropertyForm />} />
             <Route path="inmuebles/:id" element={<PropertyDetail />} />
             <Route path="inmuebles/:id/editar" element={<PropertyForm />} />
+            <Route path="proyectos" element={<Projects />} />
+            <Route path="proyectos/:id" element={<ProjectDetail />} />
+            <Route path="solicitudes" element={<Consignments />} />
             <Route path="clientes" element={<Clients />} />
             <Route path="clientes/:id" element={<ClientDetail />} />
             <Route path="embudo" element={<PipelineBoard />} />

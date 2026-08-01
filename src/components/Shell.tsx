@@ -64,6 +64,18 @@ const ICONS = {
       <path d="M3 12h18M12 3c2.5 2.7 2.5 15 0 18M12 3c-2.5 2.7-2.5 15 0 18" />
     </>,
   ),
+  projects: icon(
+    <>
+      <path d="M3 21h18M5 21V7l5-4v18M14 21V10l5-3v14" />
+      <path d="M8 9h.01M8 13h.01M8 17h.01M17 12h.01M17 16h.01" />
+    </>,
+  ),
+  inbox: icon(
+    <>
+      <path d="M3 12h5l2 3h4l2-3h5" />
+      <path d="M4.5 6.5 3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6l-1.5-5.5A2 2 0 0 0 17.6 5H6.4a2 2 0 0 0-1.9 1.5Z" />
+    </>,
+  ),
   team: icon(
     <>
       <circle cx="12" cy="7" r="3.2" />
@@ -87,12 +99,14 @@ interface NavItem {
 const MAIN: NavItem[] = [
   { to: '/', label: 'Panel', icon: ICONS.dashboard, end: true },
   { to: '/inmuebles', label: 'Inmuebles', icon: ICONS.properties },
+  { to: '/proyectos', label: 'Proyectos', icon: ICONS.projects },
   { to: '/clientes', label: 'Clientes', icon: ICONS.clients },
   { to: '/embudo', label: 'Embudo', icon: ICONS.pipeline },
   { to: '/agenda', label: 'Agenda', icon: ICONS.calendar },
 ];
 
 const MANAGE: NavItem[] = [
+  { to: '/solicitudes', label: 'Solicitudes', icon: ICONS.inbox },
   { to: '/portales', label: 'Portales', icon: ICONS.portals },
   { to: '/informes', label: 'Informes', icon: ICONS.reports },
   { to: '/equipo', label: 'Equipo', icon: ICONS.team },
