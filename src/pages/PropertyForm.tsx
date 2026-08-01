@@ -5,6 +5,7 @@ import {
   api,
   type Catalogs,
   type Property,
+  type PropertyFamily,
   type PropertyLabel,
   type Zone,
 } from '../lib/api';
@@ -52,6 +53,8 @@ interface FormState {
   videoUrl: string;
   tourUrl: string;
   observations: string;
+  familyId: string;
+  unitType: string;
   featureIds: number[];
 }
 
@@ -85,6 +88,8 @@ const BLANK: FormState = {
   videoUrl: '',
   tourUrl: '',
   observations: '',
+  familyId: '',
+  unitType: '',
   featureIds: [],
 };
 
@@ -104,6 +109,10 @@ export function PropertyForm() {
 
   const catalogs = useFetch<Catalogs>(
     (signal) => api.get<Catalogs>('/catalogs/bootstrap', undefined, signal),
+    [],
+  );
+  const families = useFetch<PropertyFamily[]>(
+    (signal) => api.get<PropertyFamily[]>('/families', undefined, signal),
     [],
   );
   const labels = useFetch<PropertyLabel[]>(
@@ -155,6 +164,8 @@ export function PropertyForm() {
       videoUrl: property.videoUrl ?? '',
       tourUrl: property.tourUrl ?? '',
       observations: property.observations ?? '',
+      familyId: property.familyId ?? '',
+      unitType: property.unitType ?? '',
       featureIds: property.features?.map((feature) => feature.id) ?? [],
     });
   }, [existing.data]);
@@ -214,6 +225,19 @@ export function PropertyForm() {
       const saved = editing
         ? await api.patch<Property>(`/properties/${id}`, payload)
         : await api.post<Property>('/properties', payload);
+
+      // El proyecto va por su propio endpoint: asignarlo deja rastro y valida
+      // la jerarquia, cosas que no pintan en el alta general del inmueble.
+      const familyChanged =
+        form.familyId !== (existing.data?.familyId ?? '') ||
+        form.unitType !== (existing.data?.unitType ?? '');
+      if (familyChanged) {
+        await api.patch(`/properties/${saved.id}/family`, {
+          familyId: form.familyId || null,
+          unitType: textOrUndefined(form.unitType),
+        });
+      }
+
       navigate(`/inmuebles/${saved.id}`);
     } catch (err) {
       setError(
@@ -552,6 +576,44 @@ export function PropertyForm() {
               value={form.observations}
               onChange={(e) => set('observations', e.target.value)}
               placeholder="Lo que un comprador necesita saber y no se ve en las fotos."
+            />
+          </div>
+        </Card>
+
+        <Card
+          title="Proyecto"
+          action={
+            <span className="note">
+              Solo si el inmueble pertenece a un conjunto o edificio
+            </span>
+          }
+        >
+          <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr' }}>
+            <SelectField
+              label="Conjunto o proyecto"
+              value={form.familyId}
+              onChange={(e) => set('familyId', e.target.value)}
+              hint={
+                (families.data ?? []).length === 0
+                  ? 'Todavía no hay proyectos: créalos en Proyectos'
+                  : 'Déjalo vacío si es un inmueble suelto'
+              }
+            >
+              <option value="">Sin proyecto</option>
+              {(families.data ?? []).map((family) => (
+                <option key={family.id} value={family.id}>
+                  {family.parentId ? '   └ ' : ''}
+                  {family.name}
+                </option>
+              ))}
+            </SelectField>
+            <Field
+              label="Tipología"
+              value={form.unitType}
+              onChange={(e) => set('unitType', e.target.value)}
+              placeholder="Tipo A"
+              disabled={!form.familyId}
+              hint="Agrupa las unidades iguales del proyecto"
             />
           </div>
         </Card>

@@ -142,11 +142,13 @@ export function PropertyDetail() {
                 Ver ficha pública
               </a>
             )}
+            {/* Un asesor puede clasificar su propio inmueble; reasignarlo a
+                otra persona es decision de coordinacion. */}
+            {editable && (
+              <Button onClick={() => setLinkingFamily(true)}>Proyecto</Button>
+            )}
             {can('ADMIN', 'MANAGER') && (
-              <>
-                <Button onClick={() => setLinkingFamily(true)}>Proyecto</Button>
-                <Button onClick={() => setAssigning(true)}>Reasignar</Button>
-              </>
+              <Button onClick={() => setAssigning(true)}>Reasignar</Button>
             )}
             {editable && (
               <Button variant="primary" onClick={() => navigate(`/inmuebles/${id}/editar`)}>
