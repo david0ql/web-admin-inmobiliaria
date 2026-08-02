@@ -76,6 +76,13 @@ const ICONS = {
       <path d="M4.5 6.5 3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6l-1.5-5.5A2 2 0 0 0 17.6 5H6.4a2 2 0 0 0-1.9 1.5Z" />
     </>,
   ),
+  credits: icon(
+    <>
+      <rect x="2" y="6" width="20" height="13" rx="2" />
+      <path d="M2 10h20" />
+      <path d="M6 15h4" />
+    </>,
+  ),
   team: icon(
     <>
       <circle cx="12" cy="7" r="3.2" />
@@ -107,6 +114,7 @@ const MAIN: NavItem[] = [
 
 const MANAGE: NavItem[] = [
   { to: '/solicitudes', label: 'Solicitudes', icon: ICONS.inbox },
+  { to: '/creditos', label: 'Créditos', icon: ICONS.credits },
   { to: '/portales', label: 'Portales', icon: ICONS.portals },
   { to: '/informes', label: 'Informes', icon: ICONS.reports },
   { to: '/equipo', label: 'Equipo', icon: ICONS.team },

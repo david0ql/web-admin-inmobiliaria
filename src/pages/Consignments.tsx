@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ApiError,
   api,
+  type ConsignmentDocumentType,
   type ConsignmentRequest,
   type ConsignmentStatus,
   type Page,
@@ -60,6 +61,15 @@ const OCCUPANCY_LABEL: Record<string, string> = {
   VACANT: 'Desocupado',
   OWNER_OCCUPIED: 'Habitado por el propietario',
 };
+
+/** Los cinco documentos que la agencia pide, en el orden del formulario. */
+const DOCUMENTS: { type: ConsignmentDocumentType; label: string }[] = [
+  { type: 'TRADITION', label: 'Certificado de tradición y libertad' },
+  { type: 'DEED', label: 'Última escritura pública de adquisición' },
+  { type: 'OWNER_ID', label: 'Cédula del o los propietarios' },
+  { type: 'PROPERTY_TAX', label: 'Último recibo de impuesto predial' },
+  { type: 'MAINTENANCE_BILL', label: 'Último recibo de administración' },
+];
 
 const VIEW_LABEL: Record<string, string> = {
   NORTH: 'Norte',
@@ -417,21 +427,54 @@ function ConsignmentDetail({
           </Card>
         )}
 
-        <Card title={`Documentos · ${documents.length}`} flush>
-          {documents.length === 0 ? (
-            <p className="note" style={{ padding: 16 }}>
-              El propietario no adjuntó documentos, o los que envió no pasaron la revisión de
-              seguridad.
-            </p>
-          ) : (
-            <div className="table-wrap">
-              <table className="data">
-                <tbody>
-                  {documents.map((document) => (
+        {/* Los cinco documentos son una lista de comprobación, no un adjunto
+            suelto: interesa tanto lo que llegó como lo que falta. */}
+        <Card title={`Documentos · ${documents.length} de ${DOCUMENTS.length}`} flush>
+          <div className="table-wrap">
+            <table className="data">
+              <tbody>
+                {DOCUMENTS.map(({ type, label }) => {
+                  const file = documents.find((doc) => doc.docType === type);
+                  return (
+                    <tr key={type}>
+                      <td>
+                        {label}
+                        {file && (
+                          <div className="note" style={{ marginTop: 2 }}>
+                            {file.originalName} · {Math.round(file.bytes / 1024)} KB
+                          </div>
+                        )}
+                      </td>
+                      <td style={{ width: 130 }}>
+                        {file ? (
+                          <a
+                            className="btn btn-sm"
+                            href={file.url}
+                            target="_blank"
+                            rel="noreferrer noopener"
+                          >
+                            Descargar
+                          </a>
+                        ) : (
+                          <Badge tone="amber">Falta</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
+
+                {/* Los que llegaron de envíos antiguos, sin categoría. */}
+                {documents
+                  .filter((doc) => !doc.docType)
+                  .map((document) => (
                     <tr key={document.storageKey}>
-                      <td>{document.originalName}</td>
-                      <td className="num">{Math.round(document.bytes / 1024)} KB</td>
-                      <td style={{ width: 110 }}>
+                      <td>
+                        Sin clasificar
+                        <div className="note" style={{ marginTop: 2 }}>
+                          {document.originalName} · {Math.round(document.bytes / 1024)} KB
+                        </div>
+                      </td>
+                      <td style={{ width: 130 }}>
                         <a
                           className="btn btn-sm"
                           href={document.url}
@@ -443,10 +486,9 @@ function ConsignmentDetail({
                       </td>
                     </tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+              </tbody>
+            </table>
+          </div>
         </Card>
 
         {editable && !request.propertyId && (

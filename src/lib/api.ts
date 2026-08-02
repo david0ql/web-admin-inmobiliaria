@@ -314,8 +314,17 @@ export type ConsignmentStatus =
   | 'ACCEPTED'
   | 'REJECTED';
 
+export type ConsignmentDocumentType =
+  | 'TRADITION'
+  | 'DEED'
+  | 'OWNER_ID'
+  | 'PROPERTY_TAX'
+  | 'MAINTENANCE_BILL';
+
 export interface ConsignmentFile {
   kind: 'DOCUMENT' | 'PHOTO';
+  /** Solo en documentos, y ausente en los que se subieron sin categoría. */
+  docType?: ConsignmentDocumentType;
   storageKey: string;
   url: string;
   originalName: string;
@@ -367,6 +376,75 @@ export interface ConsignmentRequest {
   requestedVisitAt: string | null;
   propertyId: string | null;
   clientId: string | null;
+  resolution: string | null;
+  createdAt: string;
+}
+
+// --- consultas de credito ---------------------------------------------------
+
+export type CreditRequestStatus =
+  | 'NEW'
+  | 'REVIEWING'
+  | 'SUBMITTED'
+  | 'PREAPPROVED'
+  | 'REJECTED'
+  | 'DROPPED';
+
+export type DocumentType = 'CC' | 'CE' | 'PASSPORT' | 'NIT';
+export type OccupationType = 'SALARIED' | 'PENSIONER' | 'SELF_EMPLOYED';
+export type Gender = 'FEMALE' | 'MALE' | 'OTHER' | 'UNDISCLOSED';
+
+export interface CoApplicant {
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  phone: string;
+  email: string;
+  documentType: DocumentType;
+  documentNumber: string;
+  gender: Gender | null;
+  occupation: OccupationType;
+  monthlyIncome: string | null;
+}
+
+export interface CreditRequest {
+  id: string;
+  reference: string;
+  status: CreditRequestStatus;
+
+  firstName: string;
+  lastName: string;
+  birthDate: string;
+  phone: string;
+  email: string;
+  documentType: DocumentType;
+  documentNumber: string;
+  gender: Gender | null;
+
+  occupation: OccupationType;
+  monthlyIncome: string | null;
+
+  portfolioType: 'VIS' | 'NON_VIS';
+  housingType: 'NEW' | 'USED';
+  product: 'MORTGAGE' | 'HOUSING_LEASING';
+  termYears: number;
+  workCityName: string;
+  amount: string;
+
+  hasPropertyPicked: boolean;
+  propertyValue: string | null;
+  propertyCode: string | null;
+  propertyId: string | null;
+
+  coApplicant: CoApplicant | null;
+
+  notes: string | null;
+  acceptedTermsAt: string;
+
+  clientId: string | null;
+  assignedAgentId: string | null;
+  reviewedAt: string | null;
+  institution: string | null;
   resolution: string | null;
   createdAt: string;
 }

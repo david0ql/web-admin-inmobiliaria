@@ -1,5 +1,6 @@
 import {
   useEffect,
+  useRef,
   type ButtonHTMLAttributes,
   type InputHTMLAttributes,
   type ReactNode,
@@ -7,6 +8,7 @@ import {
   type TextareaHTMLAttributes,
 } from 'react';
 import { initials } from '../lib/format';
+import { scrollToTopOf } from '../lib/scroll';
 
 // --- controles -------------------------------------------------------------
 
@@ -304,17 +306,30 @@ export function Pager({
   unit: string;
   onPage: (page: number) => void;
 }) {
+  const root = useRef<HTMLDivElement>(null);
+
+  /*
+   * El pager va al pie de la tarjeta de resultados, asi que la tarjeta es la
+   * lista: subir a su borde deja la primera fila a la vista. Resolverlo aqui
+   * y no en cada pantalla evita que la proxima tabla nazca con el mismo salto.
+   */
+  function go(next: number) {
+    onPage(next);
+    const list = root.current?.closest('.card') ?? root.current;
+    requestAnimationFrame(() => scrollToTopOf(list));
+  }
+
   if (total === 0) return null;
   return (
-    <div className="pager">
+    <div className="pager" ref={root}>
       <span className="note">
         {total.toLocaleString('es-CO')} {unit} · página {page} de {Math.max(pages, 1)}
       </span>
       <div className="row" style={{ gap: 6 }}>
-        <Button size="sm" disabled={page <= 1} onClick={() => onPage(page - 1)}>
+        <Button size="sm" disabled={page <= 1} onClick={() => go(page - 1)}>
           Anterior
         </Button>
-        <Button size="sm" disabled={page >= pages} onClick={() => onPage(page + 1)}>
+        <Button size="sm" disabled={page >= pages} onClick={() => go(page + 1)}>
           Siguiente
         </Button>
       </div>
