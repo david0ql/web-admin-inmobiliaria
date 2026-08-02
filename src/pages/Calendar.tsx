@@ -1,4 +1,5 @@
-import { useMemo, useState } from 'react';
+import { useMemo, useState, type ReactNode } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import {
   ApiError,
@@ -13,17 +14,21 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Badge,
   Button,
   Card,
   Empty,
   ErrorNote,
   Field,
+  Input,
   Loading,
   Modal,
+  PageBody,
   SelectField,
   TextareaField,
 } from '../components/ui';
+import { cn } from '../lib/utils';
 import {
   APPOINTMENT_STATUS_LABEL,
   APPOINTMENT_TYPE_LABEL,
@@ -88,53 +93,63 @@ export function Calendar() {
         actions={
           <>
             {can('ADMIN', 'MANAGER', 'VIEWER') && (
-              <label className="field" style={{ minWidth: 170 }}>
-                <span>Asesor</span>
-                <select
-                  className="select"
-                  value={agentId}
-                  onChange={(e) => setAgentId(e.target.value)}
-                >
-                  <option value="">Todo el equipo</option>
-                  {(agents.data ?? []).map((agent) => (
-                    <option key={agent.id} value={agent.id}>
-                      {agent.firstName} {agent.lastName ?? ''}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <SelectField
+                label="Asesor"
+                className="min-w-[170px]"
+                value={agentId}
+                onChange={(e) => setAgentId(e.target.value)}
+              >
+                <option value="">Todo el equipo</option>
+                {(agents.data ?? []).map((agent) => (
+                  <option key={agent.id} value={agent.id}>
+                    {agent.firstName} {agent.lastName ?? ''}
+                  </option>
+                ))}
+              </SelectField>
             )}
             <Button
+              variant="outline"
+              size="icon"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() - 1, 1))}
               aria-label="Mes anterior"
             >
-              ←
+              <ChevronLeft />
             </Button>
-            <Button onClick={() => setCursor(new Date())}>Hoy</Button>
+            <Button variant="outline" onClick={() => setCursor(new Date())}>
+              Hoy
+            </Button>
             <Button
+              variant="outline"
+              size="icon"
               onClick={() => setCursor(new Date(cursor.getFullYear(), cursor.getMonth() + 1, 1))}
               aria-label="Mes siguiente"
             >
-              →
+              <ChevronRight />
             </Button>
             {can('ADMIN', 'MANAGER', 'AGENT') && (
-              <Button variant="primary" onClick={() => setCreating(true)}>
-                Agendar cita
-              </Button>
+              <Button onClick={() => setCreating(true)}>Agendar cita</Button>
             )}
           </>
         }
       />
 
-      <div className="content stack">
+      <PageBody>
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && !data && <Loading rows={6} />}
 
         {data && (
           <>
-            <div className="cal">
+            {/*
+              El `gap-px` sobre `bg-border` es el truco de siempre para las
+              lineas de un pixel: el fondo del contenedor asoma por las juntas y
+              no hay que sumar bordes celda a celda.
+            */}
+            <div className="grid grid-cols-7 gap-px overflow-hidden rounded-lg border bg-border">
               {WEEKDAYS_SHORT.map((day) => (
-                <div key={day} className="cal-dow">
+                <div
+                  key={day}
+                  className="micro-label bg-secondary px-2 py-1.5 text-center text-muted-foreground"
+                >
                   {day}
                 </div>
               ))}
@@ -146,20 +161,25 @@ export function Calendar() {
                 return (
                   <div
                     key={key}
-                    className={`cal-day ${outside ? 'out' : ''} ${key === today ? 'today' : ''}`.trim()}
+                    data-out={outside || undefined}
+                    data-today={key === today || undefined}
+                    className="group flex min-h-[106px] flex-col gap-1 bg-card p-1.5 data-out:bg-secondary/60"
                   >
-                    <span className="cal-num">{day.getDate()}</span>
+                    <span className="tabular grid size-5 shrink-0 place-items-center self-start rounded-full text-xs text-muted-foreground group-data-today:bg-primary group-data-today:text-primary-foreground">
+                      {day.getDate()}
+                    </span>
                     {appointments.slice(0, 4).map((appointment) => (
                       <button
                         key={appointment.id}
                         type="button"
-                        className={`cal-item ${
+                        className={cn(
+                          'block w-full truncate rounded-sm border-l-2 px-1.5 py-0.5 text-left text-xs leading-snug',
                           appointment.status === 'DONE'
-                            ? 'is-done'
+                            ? 'border-muted-foreground bg-secondary text-muted-foreground'
                             : appointment.status === 'NO_SHOW'
-                              ? 'is-missed'
-                              : ''
-                        }`.trim()}
+                              ? 'border-destructive bg-red-50 text-red-800'
+                              : 'border-emerald-600 bg-emerald-50',
+                        )}
                         onClick={() => setSelected(appointment)}
                         title={appointment.title}
                       >
@@ -176,7 +196,7 @@ export function Calendar() {
 
             {data.shifts.length > 0 && (
               <Card title="Turnos del asesor">
-                <div className="row row-wrap" style={{ gap: 8 }}>
+                <div className="flex flex-wrap gap-2">
                   {data.shifts.map((shift) => (
                     <Badge key={shift.id} tone={shift.kind === 'ON_CALL' ? 'amber' : 'neutral'}>
                       {WEEKDAYS_SHORT[shift.weekday]} {shift.startTime.slice(0, 5)}–
@@ -189,25 +209,21 @@ export function Calendar() {
             )}
 
             {(data.days.length === 0 || !data.days.some((d) => d.appointments.length)) && (
-              <Card>
-                <Empty
-                  title="No hay citas este mes"
-                  action={
-                    can('ADMIN', 'MANAGER', 'AGENT') && (
-                      <Button variant="primary" onClick={() => setCreating(true)}>
-                        Agendar la primera
-                      </Button>
-                    )
-                  }
-                >
-                  Al agendar una visita se avisa si choca con otra cita o cae fuera del turno del
-                  asesor.
-                </Empty>
-              </Card>
+              <Empty
+                title="No hay citas este mes"
+                action={
+                  can('ADMIN', 'MANAGER', 'AGENT') && (
+                    <Button onClick={() => setCreating(true)}>Agendar la primera</Button>
+                  )
+                }
+              >
+                Al agendar una visita se avisa si choca con otra cita o cae fuera del turno del
+                asesor.
+              </Empty>
             )}
           </>
         )}
-      </div>
+      </PageBody>
 
       {creating && (
         <AppointmentModal
@@ -326,14 +342,15 @@ function AppointmentModal({
       wide
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           {conflict && (
-            <Button variant="danger" loading={busy} onClick={() => void save(true)}>
+            <Button variant="destructive" loading={busy} onClick={() => void save(true)}>
               Agendar igualmente
             </Button>
           )}
           <Button
-            variant="primary"
             loading={busy}
             disabled={!form.title.trim()}
             onClick={() => void save(false)}
@@ -343,8 +360,8 @@ function AppointmentModal({
         </>
       }
     >
-      <div className="stack">
-        {error && <div className={conflict ? 'alert alert-warn' : 'alert'}>{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert tone={conflict ? 'warn' : 'error'}>{error}</Alert>}
 
         <Field
           label="Título"
@@ -355,7 +372,7 @@ function AppointmentModal({
           placeholder="Visita apartamento Cañaveral"
         />
 
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
           <SelectField
             label="Tipo"
             value={form.type}
@@ -397,11 +414,10 @@ function AppointmentModal({
           )}
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
-          <div className="field">
-            <label>Cliente</label>
-            <input
-              className="input"
+        <div className="grid gap-4 sm:grid-cols-2">
+          <div className="grid content-start gap-1.5">
+            <span className="micro-label text-muted-foreground">Cliente</span>
+            <Input
               value={clientQuery}
               onChange={(e) => {
                 setClientQuery(e.target.value);
@@ -411,26 +427,28 @@ function AppointmentModal({
             />
             {!form.clientId &&
               (clients.data?.data ?? []).map((client) => (
-                <button
+                <Button
                   key={client.id}
                   type="button"
-                  className="btn btn-sm btn-ghost"
-                  style={{ justifyContent: 'flex-start' }}
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start"
                   onClick={() => {
                     setForm({ ...form, clientId: client.id });
                     setClientQuery(`${client.firstName} ${client.lastName ?? ''}`);
                   }}
                 >
                   {client.firstName} {client.lastName ?? ''}
-                </button>
+                </Button>
               ))}
-            {form.clientId && <span className="field-hint">Cliente seleccionado</span>}
+            {form.clientId && (
+              <span className="text-xs text-muted-foreground">Cliente seleccionado</span>
+            )}
           </div>
 
-          <div className="field">
-            <label>Inmueble</label>
-            <input
-              className="input"
+          <div className="grid content-start gap-1.5">
+            <span className="micro-label text-muted-foreground">Inmueble</span>
+            <Input
               value={propertyQuery}
               onChange={(e) => {
                 setPropertyQuery(e.target.value);
@@ -440,20 +458,23 @@ function AppointmentModal({
             />
             {!form.propertyId &&
               (properties.data?.data ?? []).map((property) => (
-                <button
+                <Button
                   key={property.id}
                   type="button"
-                  className="btn btn-sm btn-ghost"
-                  style={{ justifyContent: 'flex-start' }}
+                  variant="ghost"
+                  size="sm"
+                  className="justify-start"
                   onClick={() => {
                     setForm({ ...form, propertyId: property.id });
                     setPropertyQuery(`${property.code} · ${property.title.slice(0, 30)}`);
                   }}
                 >
                   {property.code} · {property.title.slice(0, 34)}
-                </button>
+                </Button>
               ))}
-            {form.propertyId && <span className="field-hint">Inmueble seleccionado</span>}
+            {form.propertyId && (
+              <span className="text-xs text-muted-foreground">Inmueble seleccionado</span>
+            )}
           </div>
         </div>
 
@@ -511,25 +532,27 @@ function AppointmentDetail({
       footer={
         !closed && can('ADMIN', 'MANAGER', 'AGENT') ? (
           <>
-            <Button variant="danger" loading={busy} onClick={() => void close('CANCELED')}>
+            <Button variant="destructive" loading={busy} onClick={() => void close('CANCELED')}>
               Cancelar cita
             </Button>
-            <Button loading={busy} onClick={() => void close('NO_SHOW')}>
+            <Button variant="outline" loading={busy} onClick={() => void close('NO_SHOW')}>
               No asistió
             </Button>
-            <Button variant="primary" loading={busy} onClick={() => void close('DONE')}>
+            <Button loading={busy} onClick={() => void close('DONE')}>
               Marcar realizada
             </Button>
           </>
         ) : (
-          <Button onClick={onClose}>Cerrar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
         )
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
-        <div className="row row-wrap" style={{ gap: 6 }}>
+        <div className="flex flex-wrap gap-1.5">
           <Badge tone="blue">{APPOINTMENT_TYPE_LABEL[appointment.type]}</Badge>
           <Badge
             tone={
@@ -544,56 +567,42 @@ function AppointmentDetail({
           </Badge>
         </div>
 
-        <div className="table-wrap">
-          <table className="data">
-            <tbody>
-              <tr>
-                <td className="note">Cuándo</td>
-                <td>
-                  {dateTime(appointment.startsAt)} — {time(appointment.endsAt)}
-                </td>
-              </tr>
-              <tr>
-                <td className="note">Asesor</td>
-                <td>
-                  {appointment.agent.firstName} {appointment.agent.lastName ?? ''}
-                </td>
-              </tr>
-              {appointment.client && (
-                <tr>
-                  <td className="note">Cliente</td>
-                  <td>
-                    <Link to={`/clientes/${appointment.clientId}`} onClick={onClose}>
-                      {appointment.client.firstName} {appointment.client.lastName ?? ''}
-                    </Link>
-                  </td>
-                </tr>
-              )}
-              {appointment.property && (
-                <tr>
-                  <td className="note">Inmueble</td>
-                  <td>
-                    <Link to={`/inmuebles/${appointment.propertyId}`} onClick={onClose}>
-                      {appointment.property.code} · {appointment.property.title.slice(0, 40)}
-                    </Link>
-                  </td>
-                </tr>
-              )}
-              {appointment.location && (
-                <tr>
-                  <td className="note">Punto de encuentro</td>
-                  <td>{appointment.location}</td>
-                </tr>
-              )}
-              {appointment.notes && (
-                <tr>
-                  <td className="note">Notas</td>
-                  <td style={{ whiteSpace: 'pre-wrap' }}>{appointment.notes}</td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
+        <dl className="grid">
+          <Row label="Cuándo">
+            {dateTime(appointment.startsAt)} — {time(appointment.endsAt)}
+          </Row>
+          <Row label="Asesor">
+            {appointment.agent.firstName} {appointment.agent.lastName ?? ''}
+          </Row>
+          {appointment.client && (
+            <Row label="Cliente">
+              <Link
+                to={`/clientes/${appointment.clientId}`}
+                onClick={onClose}
+                className="hover:underline"
+              >
+                {appointment.client.firstName} {appointment.client.lastName ?? ''}
+              </Link>
+            </Row>
+          )}
+          {appointment.property && (
+            <Row label="Inmueble">
+              <Link
+                to={`/inmuebles/${appointment.propertyId}`}
+                onClick={onClose}
+                className="hover:underline"
+              >
+                {appointment.property.code} · {appointment.property.title.slice(0, 40)}
+              </Link>
+            </Row>
+          )}
+          {appointment.location && <Row label="Punto de encuentro">{appointment.location}</Row>}
+          {appointment.notes && (
+            <Row label="Notas">
+              <span className="whitespace-pre-wrap">{appointment.notes}</span>
+            </Row>
+          )}
+        </dl>
 
         {!closed && (
           <TextareaField
@@ -606,10 +615,20 @@ function AppointmentDetail({
         {closed && appointment.outcome && (
           <div>
             <span className="note">Resultado</span>
-            <p style={{ fontSize: 'var(--t-small)', marginTop: 4 }}>{appointment.outcome}</p>
+            <p className="mt-1 text-sm">{appointment.outcome}</p>
           </div>
         )}
       </div>
     </Modal>
+  );
+}
+
+/** Una fila de la ficha de la cita: rotulo a la izquierda, dato a la derecha. */
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 border-b py-2.5 text-sm last:border-b-0">
+      <dt className="shrink-0 text-muted-foreground">{label}</dt>
+      <dd className="text-right font-medium">{children}</dd>
+    </div>
   );
 }

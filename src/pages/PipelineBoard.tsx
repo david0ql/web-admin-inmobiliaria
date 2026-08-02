@@ -13,7 +13,16 @@ import {
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
-import { Badge, Button, ErrorNote, Loading } from '../components/ui';
+import {
+  Badge,
+  Button,
+  CheckField,
+  ErrorNote,
+  Field,
+  Loading,
+  PageBody,
+  SelectField,
+} from '../components/ui';
 import { number, relative } from '../lib/format';
 
 interface BoardData {
@@ -147,81 +156,68 @@ export function PipelineBoard() {
         eyebrow="Embudo comercial"
         title={data?.kanban.pipeline.name ?? 'Embudo'}
         actions={
-          <label className="field" style={{ minWidth: 190 }}>
-            <span>Embudo</span>
-            <select
-              className="select"
-              value={pipelineId || (data?.kanban.pipeline.id ?? '')}
-              onChange={(e) => {
-                setPipelineId(e.target.value);
-                setLimits({});
-              }}
-            >
-              {(data?.pipelines ?? []).map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="Embudo"
+            className="min-w-[190px]"
+            value={pipelineId || (data?.kanban.pipeline.id ?? '')}
+            onChange={(e) => {
+              setPipelineId(e.target.value);
+              setLimits({});
+            }}
+          >
+            {(data?.pipelines ?? []).map((pipeline) => (
+              <option key={pipeline.id} value={pipeline.id}>
+                {pipeline.name}
+              </option>
+            ))}
+          </SelectField>
         }
       />
 
-      <div className="content stack">
-        <div className="filters">
-          <label className="field" style={{ flex: '1 1 220px' }}>
-            <span>Buscar</span>
-            <input
-              className="input"
-              value={filters.q}
-              onChange={(e) => set('q', e.target.value)}
-              placeholder="Nombre, correo, teléfono o cédula"
-            />
-          </label>
+      <PageBody>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+          <Field
+            label="Buscar"
+            className="col-span-2"
+            value={filters.q}
+            onChange={(e) => set('q', e.target.value)}
+            placeholder="Nombre, correo, teléfono o cédula"
+          />
 
           {can('ADMIN', 'MANAGER', 'VIEWER') && (
-            <label className="field" style={{ flex: '0 1 180px' }}>
-              <span>Asesor</span>
-              <select
-                className="select"
-                value={filters.assignedAgentId}
-                onChange={(e) => set('assignedAgentId', e.target.value)}
-              >
-                <option value="">Todos</option>
-                {(agents.data ?? []).map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.firstName} {agent.lastName ?? ''}
-                  </option>
-                ))}
-              </select>
-            </label>
-          )}
-
-          <label className="field" style={{ flex: '0 1 180px' }}>
-            <span>Origen</span>
-            <select
-              className="select"
-              value={filters.sourceId}
-              onChange={(e) => set('sourceId', e.target.value)}
+            <SelectField
+              label="Asesor"
+              value={filters.assignedAgentId}
+              onChange={(e) => set('assignedAgentId', e.target.value)}
             >
               <option value="">Todos</option>
-              {(sources.data ?? []).map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
+              {(agents.data ?? []).map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.firstName} {agent.lastName ?? ''}
                 </option>
               ))}
-            </select>
-          </label>
+            </SelectField>
+          )}
 
-          <div className="row" style={{ gap: 12, paddingBottom: 8 }}>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={filters.stale}
-                onChange={(e) => set('stale', e.target.checked)}
-              />
-              Sin contacto en 30 días
-            </label>
+          <SelectField
+            label="Origen"
+            value={filters.sourceId}
+            onChange={(e) => set('sourceId', e.target.value)}
+          >
+            <option value="">Todos</option>
+            {(sources.data ?? []).map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.name}
+              </option>
+            ))}
+          </SelectField>
+
+          <div className="col-span-2 flex flex-wrap items-end gap-4 pb-2">
+            <CheckField
+              label="Sin contacto en 30 días"
+              checked={filters.stale}
+              onChange={(e) => set('stale', e.target.checked)}
+            />
             {activeFilters > 0 && (
               <Button variant="ghost" size="sm" onClick={() => setFilters(EMPTY)}>
                 Limpiar {activeFilters}
@@ -243,7 +239,7 @@ export function PipelineBoard() {
               {activeFilters > 0 && ` · ${number(grandTotal)} clientes coinciden con el filtro`}
             </p>
 
-            <div className="board">
+            <div className="flex items-start gap-3 overflow-x-auto pb-2">
               {data.kanban.stages.map((stage) => {
                 const clients = data.byStage[stage.id] ?? [];
                 const total = data.totals[stage.id] ?? 0;
@@ -253,7 +249,13 @@ export function PipelineBoard() {
                 return (
                   <section
                     key={stage.id}
-                    className={`board-col ${isTarget ? 'drop' : ''}`.trim()}
+                    /*
+                      `isTarget || undefined` y no `isTarget` a secas: React
+                      pintaria `data-drop="false"`, que sigue casando con
+                      `[data-drop]`, y todas las columnas quedarian resaltadas.
+                    */
+                    data-drop={isTarget || undefined}
+                    className="flex max-h-[calc(100vh-16rem)] w-[268px] shrink-0 flex-col rounded-lg border bg-secondary/50 transition-colors data-drop:border-primary data-drop:bg-secondary"
                     onDragOver={(e) => {
                       if (!editable || !dragging) return;
                       e.preventDefault();
@@ -265,36 +267,34 @@ export function PipelineBoard() {
                       void moveTo(stage.id);
                     }}
                   >
-                    <header className="board-head">
-                      <div className="board-title">
-                        <span className="row" style={{ gap: 6, minWidth: 0 }}>
-                          <i className="dot" style={{ background: stage.color }} />
-                          <span
-                            style={{
-                              overflow: 'hidden',
-                              textOverflow: 'ellipsis',
-                              whiteSpace: 'nowrap',
-                            }}
-                          >
-                            {stage.name}
-                          </span>
+                    <header className="border-b px-3 py-2.5">
+                      <div className="flex items-center justify-between gap-2 text-sm font-medium">
+                        <span className="flex min-w-0 items-center gap-1.5">
+                          {/* El color de la etapa lo manda la API: no hay clase
+                              de Tailwind posible para un valor de runtime. */}
+                          <i
+                            className="size-1.5 shrink-0 rounded-full"
+                            style={{ background: stage.color }}
+                            aria-hidden
+                          />
+                          <span className="truncate">{stage.name}</span>
                           {stage.isWon && <Badge tone="green">gana</Badge>}
                           {stage.isLost && <Badge tone="red">pierde</Badge>}
                         </span>
-                        <span className="figure note">{number(total)}</span>
+                        <span className="note tabular">{number(total)}</span>
                       </div>
-                      {/* La barra es una cota: su longitud dice cuánto pesa esta
-                          etapa sobre el total mostrado. */}
-                      <div className="board-gauge">
+                      {/* La barra dice cuánto pesa esta etapa sobre el total. */}
+                      <div className="gauge mt-1.5">
                         <i style={{ width: `${share}%`, background: stage.color }} />
                       </div>
                     </header>
 
-                    <div className="board-list">
+                    <div className="flex min-h-[60px] flex-col gap-1.5 overflow-y-auto p-2">
                       {clients.map((client) => (
                         <article
                           key={client.id}
-                          className={`lead ${dragging?.id === client.id ? 'dragging' : ''}`.trim()}
+                          data-dragging={dragging?.id === client.id || undefined}
+                          className="cursor-grab rounded-md border bg-card p-2.5 transition-colors hover:border-input hover:shadow-sm data-dragging:opacity-40"
                           draggable={editable}
                           onDragStart={() => setDragging(client)}
                           onDragEnd={() => {
@@ -308,18 +308,18 @@ export function PipelineBoard() {
                             if (e.key === 'Enter') navigate(`/clientes/${client.id}`);
                           }}
                         >
-                          <span className="lead-name">
+                          <span className="block text-sm leading-snug font-medium">
                             {client.firstName} {client.lastName ?? ''}
                           </span>
-                          <span className="lead-meta">
+                          <span className="mt-1 block truncate text-xs text-muted-foreground">
                             {client.cellPhone ?? client.email ?? 'sin contacto'}
                           </span>
-                          <span className="lead-meta">
+                          <span className="block truncate text-xs text-muted-foreground">
                             {client.assignedAgent?.firstName ?? 'sin asesor'} ·{' '}
                             {client.lastContactedAt ? relative(client.lastContactedAt) : 'nunca'}
                           </span>
                           {client.types.length > 0 && (
-                            <span className="row row-wrap" style={{ gap: 4, marginTop: 6 }}>
+                            <span className="mt-1.5 flex flex-wrap gap-1">
                               {client.types.slice(0, 2).map((type) => (
                                 <Badge key={type.id}>{type.name}</Badge>
                               ))}
@@ -345,7 +345,7 @@ export function PipelineBoard() {
                       )}
 
                       {total === 0 && (
-                        <span className="note" style={{ padding: '8px 2px' }}>
+                        <span className="note px-0.5 py-2">
                           {activeFilters > 0 ? 'Nadie coincide' : 'Vacía'}
                         </span>
                       )}
@@ -356,7 +356,7 @@ export function PipelineBoard() {
             </div>
           </>
         )}
-      </div>
+      </PageBody>
     </>
   );
 }

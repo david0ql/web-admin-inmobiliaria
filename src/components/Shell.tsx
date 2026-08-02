@@ -1,100 +1,35 @@
 import { useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useLocation } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
+import {
+  BarChart3,
+  Building2,
+  CalendarDays,
+  CreditCard,
+  Globe,
+  Home,
+  Inbox,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  SquareKanban,
+  UserCog,
+  Users,
+  X,
+} from 'lucide-react';
 import { useAuth } from '../lib/auth';
 import { ROLE_LABEL } from '../lib/format';
-import { Avatar, Button } from './ui';
+import { Avatar, Button, Sheet, SheetContent, SheetTitle } from './ui';
+import { cn } from '../lib/utils';
 
 /**
- * Iconos dibujados a mano en SVG con trazo de 1,5: el mismo grosor que las
- * lineas de cota del resto de la interfaz, para que no parezcan pegados de
- * otra libreria.
+ * El marco del panel: rail a la izquierda y contenido a la derecha.
+ *
+ * El rail es la misma tinta que la barra superior del sitio publico —negro con
+ * el filete de 4px arriba— para que las dos caras del producto se lean como la
+ * misma marca. Por debajo de 992px no existe como columna: se abre en un Sheet
+ * de Radix, que trae la trampa de foco, el Escape y el bloqueo de scroll ya
+ * hechos.
  */
-const icon = (path: ReactNode) => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 24 24"
-    fill="none"
-    stroke="currentColor"
-    strokeWidth="1.6"
-    strokeLinecap="round"
-    strokeLinejoin="round"
-    aria-hidden
-  >
-    {path}
-  </svg>
-);
-
-const ICONS = {
-  dashboard: icon(
-    <>
-      <path d="M3 13h6V3H3zM15 21h6V11h-6zM3 21h6v-4H3zM15 7h6V3h-6z" />
-    </>,
-  ),
-  properties: icon(
-    <>
-      <path d="M3 10.5 12 3l9 7.5" />
-      <path d="M5 9.5V21h14V9.5" />
-      <path d="M10 21v-6h4v6" />
-    </>,
-  ),
-  clients: icon(
-    <>
-      <circle cx="9" cy="8" r="3.2" />
-      <path d="M3 20c0-3.3 2.7-5.5 6-5.5s6 2.2 6 5.5" />
-      <path d="M17 11.5a3 3 0 1 0-1.6-5.5M18 20c0-2.5-.9-4.3-2.5-5.2" />
-    </>,
-  ),
-  pipeline: icon(
-    <>
-      <rect x="3" y="4" width="5" height="16" rx="1" />
-      <rect x="10" y="4" width="5" height="11" rx="1" />
-      <rect x="17" y="4" width="4" height="7" rx="1" />
-    </>,
-  ),
-  calendar: icon(
-    <>
-      <rect x="3" y="5" width="18" height="16" rx="2" />
-      <path d="M3 10h18M8 3v4M16 3v4" />
-    </>,
-  ),
-  portals: icon(
-    <>
-      <circle cx="12" cy="12" r="9" />
-      <path d="M3 12h18M12 3c2.5 2.7 2.5 15 0 18M12 3c-2.5 2.7-2.5 15 0 18" />
-    </>,
-  ),
-  projects: icon(
-    <>
-      <path d="M3 21h18M5 21V7l5-4v18M14 21V10l5-3v14" />
-      <path d="M8 9h.01M8 13h.01M8 17h.01M17 12h.01M17 16h.01" />
-    </>,
-  ),
-  inbox: icon(
-    <>
-      <path d="M3 12h5l2 3h4l2-3h5" />
-      <path d="M4.5 6.5 3 12v6a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-6l-1.5-5.5A2 2 0 0 0 17.6 5H6.4a2 2 0 0 0-1.9 1.5Z" />
-    </>,
-  ),
-  credits: icon(
-    <>
-      <rect x="2" y="6" width="20" height="13" rx="2" />
-      <path d="M2 10h20" />
-      <path d="M6 15h4" />
-    </>,
-  ),
-  team: icon(
-    <>
-      <circle cx="12" cy="7" r="3.2" />
-      <path d="M5 20c0-3.6 3.1-6 7-6s7 2.4 7 6" />
-    </>,
-  ),
-  reports: icon(
-    <>
-      <path d="M4 20V10M10 20V4M16 20v-7M22 20H2" />
-    </>,
-  ),
-};
 
 interface NavItem {
   to: string;
@@ -104,96 +39,152 @@ interface NavItem {
 }
 
 const MAIN: NavItem[] = [
-  { to: '/', label: 'Panel', icon: ICONS.dashboard, end: true },
-  { to: '/inmuebles', label: 'Inmuebles', icon: ICONS.properties },
-  { to: '/proyectos', label: 'Proyectos', icon: ICONS.projects },
-  { to: '/clientes', label: 'Clientes', icon: ICONS.clients },
-  { to: '/embudo', label: 'Embudo', icon: ICONS.pipeline },
-  { to: '/agenda', label: 'Agenda', icon: ICONS.calendar },
+  { to: '/', label: 'Panel', icon: <LayoutDashboard />, end: true },
+  { to: '/inmuebles', label: 'Inmuebles', icon: <Home /> },
+  { to: '/proyectos', label: 'Proyectos', icon: <Building2 /> },
+  { to: '/clientes', label: 'Clientes', icon: <Users /> },
+  { to: '/embudo', label: 'Embudo', icon: <SquareKanban /> },
+  { to: '/agenda', label: 'Agenda', icon: <CalendarDays /> },
 ];
 
 const MANAGE: NavItem[] = [
-  { to: '/solicitudes', label: 'Solicitudes', icon: ICONS.inbox },
-  { to: '/creditos', label: 'Créditos', icon: ICONS.credits },
-  { to: '/portales', label: 'Portales', icon: ICONS.portals },
-  { to: '/informes', label: 'Informes', icon: ICONS.reports },
-  { to: '/equipo', label: 'Equipo', icon: ICONS.team },
+  { to: '/solicitudes', label: 'Solicitudes', icon: <Inbox /> },
+  { to: '/creditos', label: 'Créditos', icon: <CreditCard /> },
+  { to: '/portales', label: 'Portales', icon: <Globe /> },
+  { to: '/informes', label: 'Informes', icon: <BarChart3 /> },
+  // A proposito distinto de `Users`: equipo y clientes tienen que leerse
+  // aparte de un vistazo.
+  { to: '/equipo', label: 'Equipo', icon: <UserCog /> },
 ];
 
-export function Shell() {
+/*
+  El className de NavLink va como cadena y el estado activo se pesca con
+  `[&.active]`, no con la forma de funcion. NavLink ya anade la clase `active`
+  el solo, y la forma de funcion se pierde en cuanto el enlace pasa por un Slot.
+*/
+const RAIL_LINK = cn(
+  'flex items-center gap-2.5 rounded-md px-3 py-2',
+  'text-[13px] font-medium tracking-wide uppercase',
+  'text-white/70 transition-colors hover:bg-white/10 hover:text-white',
+  '[&.active]:bg-white [&.active]:text-rail',
+  '[&_svg]:size-4 [&_svg]:shrink-0',
+);
+
+function RailNav({ onNavigate }: { onNavigate: () => void }) {
   const { user, signOut } = useAuth();
+
+  return (
+    <>
+      <NavLink
+        to="/"
+        onClick={onNavigate}
+        className="flex flex-col gap-0.5 px-4 py-4 [&.active]:bg-transparent"
+      >
+        <strong className="text-base leading-none font-semibold tracking-tight text-white">
+          Serrano
+        </strong>
+        <span className="note text-white/50">Inmobiliaria</span>
+      </NavLink>
+
+      <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5">
+        {MAIN.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            end={item.end}
+            className={RAIL_LINK}
+            onClick={onNavigate}
+          >
+            {item.icon}
+            {item.label}
+          </NavLink>
+        ))}
+
+        <div className="micro-label px-3 pt-5 pb-1.5 text-white/40">Gestión</div>
+        {MANAGE.map((item) => (
+          <NavLink
+            key={item.to}
+            to={item.to}
+            className={RAIL_LINK}
+            onClick={onNavigate}
+          >
+            {item.icon}
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
+
+      <div className="mx-2.5 mt-2 mb-3 border-t border-white/10 pt-3">
+        <div className="flex items-center gap-2.5 px-1 pb-2">
+          <Avatar name={user?.fullName ?? ''} src={user?.photoUrl} />
+          <div className="min-w-0">
+            <strong className="block truncate text-[13px] font-medium text-white">
+              {user?.fullName}
+            </strong>
+            <span className="note block truncate text-white/50">
+              {ROLE_LABEL[user?.role ?? ''] ?? user?.role}
+            </span>
+          </div>
+        </div>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={() => void signOut()}
+          className="w-full justify-start text-white/70 hover:bg-white/10 hover:text-white"
+        >
+          <LogOut />
+          Cerrar sesión
+        </Button>
+      </div>
+    </>
+  );
+}
+
+export function Shell() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
 
   return (
-    <div className="shell">
-      <div
-        className={`rail-scrim ${open ? 'show' : ''}`.trim()}
-        onClick={() => setOpen(false)}
-        aria-hidden
-      />
-
-      <aside className={`rail ${open ? 'open' : ''}`.trim()}>
-        <NavLink to="/" className="rail-brand" onClick={() => setOpen(false)}>
-          <strong>Serrano</strong>
-          <span>Inmobiliaria</span>
-        </NavLink>
-
-        <nav className="rail-nav">
-          {MAIN.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              className={({ isActive }) => `rail-link ${isActive ? 'active' : ''}`}
-              onClick={() => setOpen(false)}
-            >
-              {item.icon}
-              {item.label}
-            </NavLink>
-          ))}
-
-          <div className="rail-section">Gestión</div>
-          {MANAGE.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              className={({ isActive }) => `rail-link ${isActive ? 'active' : ''}`}
-              onClick={() => setOpen(false)}
-            >
-              {item.icon}
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-
-        <div className="rail-foot">
-          <div className="rail-user">
-            <Avatar name={user?.fullName ?? ''} src={user?.photoUrl} />
-            <div style={{ minWidth: 0 }}>
-              <strong>{user?.fullName}</strong>
-              <span>{ROLE_LABEL[user?.role ?? ''] ?? user?.role}</span>
-            </div>
-          </div>
-          <Button
-            variant="ghost"
-            size="sm"
-            onClick={() => void signOut()}
-            style={{ color: '#b9c9c1', width: '100%', justifyContent: 'flex-start' }}
-          >
-            Cerrar sesión
-          </Button>
-        </div>
+    <div className="grid min-h-screen lg:grid-cols-[var(--spacing-rail)_1fr]">
+      <aside className="sticky top-0 hidden h-screen flex-col border-t-4 border-rail-line bg-rail text-white lg:flex">
+        <RailNav onNavigate={() => undefined} />
       </aside>
 
-      <div className="main">
+      <Sheet open={open} onOpenChange={setOpen}>
+        <SheetContent
+          side="left"
+          className="w-rail border-t-4 border-r-0 border-rail-line bg-rail p-0 text-white lg:hidden"
+        >
+          <SheetTitle className="sr-only">Navegación</SheetTitle>
+          {/* El Sheet copiado no trae boton de cerrar: sobre el negro del rail
+              la esquina superior derecha la ocupa la marca. Va aqui, abajo. */}
+          <button
+            type="button"
+            onClick={() => setOpen(false)}
+            aria-label="Cerrar menú"
+            className="absolute top-4 right-3 rounded-md p-1 text-white/60 transition-colors hover:bg-white/10 hover:text-white"
+          >
+            <X className="size-5" />
+          </button>
+          <RailNav onNavigate={() => setOpen(false)} />
+        </SheetContent>
+      </Sheet>
+
+      <div className="flex min-w-0 flex-col">
         <Outlet key={location.pathname} context={{ openRail: () => setOpen(true) }} />
       </div>
     </div>
   );
 }
 
-/** Cabecera de pagina. El eyebrow dice donde estas; el titulo, que hay aqui. */
+/**
+ * Cabecera de pagina. El eyebrow dice donde estas; el titulo, que hay aqui.
+ *
+ * Lleva `data-page-header` porque `lib/scroll.ts` mide su alto para no dejar la
+ * primera fila de una lista debajo de ella al paginar. Y aqui vive el boton del
+ * menu movil: el contexto `openRail` existia desde el primer dia sin que nadie
+ * lo consumiera, asi que el rail off-canvas era inalcanzable.
+ */
 export function PageHeader({
   eyebrow,
   title,
@@ -203,13 +194,29 @@ export function PageHeader({
   title: ReactNode;
   actions?: ReactNode;
 }) {
+  const { openRail } = useOutletContext<{ openRail: () => void }>();
+
   return (
-    <header className="topbar">
-      <div style={{ minWidth: 0 }}>
-        <span className="note">{eyebrow}</span>
-        <h1>{title}</h1>
+    <header
+      data-page-header
+      className="sticky top-0 z-30 flex flex-wrap items-end justify-between gap-4 border-b bg-background/95 px-4 py-4 backdrop-blur supports-[backdrop-filter]:bg-background/85 lg:px-8"
+    >
+      <div className="flex min-w-0 items-center gap-3">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="lg:hidden"
+          aria-label="Abrir menú"
+          onClick={openRail}
+        >
+          <Menu />
+        </Button>
+        <div className="min-w-0">
+          <span className="note block">{eyebrow}</span>
+          <h1 className="truncate text-2xl font-semibold tracking-tight">{title}</h1>
+        </div>
       </div>
-      {actions && <div className="row row-wrap">{actions}</div>}
+      {actions && <div className="flex flex-wrap items-center gap-2">{actions}</div>}
     </header>
   );
 }

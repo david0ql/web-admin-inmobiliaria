@@ -124,6 +124,21 @@ export const AVAILABILITY_LABEL: Record<string, string> = {
   WITHDRAWN: 'Retirado',
 };
 
+/*
+ * Los mismos hexes que usa el sitio publico (web-sell/src/lib/format.ts): la
+ * paleta de etiquetas de WASI oscurecida hasta pasar AA con texto blanco
+ * encima. El ratio de contraste va anotado en cada una. Que la ficha de un
+ * inmueble se vea igual en el panel y en la web no es cosmetico — el asesor
+ * comprueba aqui lo que el cliente esta viendo alli.
+ */
+export const AVAILABILITY_COLOR: Record<string, string> = {
+  AVAILABLE: '#2f7d4f', // 5,04:1
+  RESERVED: '#8a6209', // 5,48:1
+  SOLD: '#a81c1c', // 7,37:1
+  RENTED: '#8a6209', // 5,48:1
+  WITHDRAWN: '#6b6b6b', // 5,33:1
+};
+
 export const PUBLICATION_LABEL: Record<string, string> = {
   DRAFT: 'Borrador',
   ACTIVE: 'Publicado',

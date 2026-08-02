@@ -13,16 +13,25 @@ import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Badge,
   Button,
   Card,
+  CheckField,
   Empty,
   ErrorNote,
   Field,
   Loading,
   Modal,
+  PageBody,
   SelectField,
+  Table,
+  TBody,
+  Td,
   TextareaField,
+  Th,
+  THead,
+  Tr,
 } from '../components/ui';
 import { number } from '../lib/format';
 
@@ -70,79 +79,71 @@ export function Projects() {
         title="Proyectos"
         actions={
           can('ADMIN', 'MANAGER') && (
-            <Button variant="primary" onClick={() => setCreating(true)}>
-              Nuevo proyecto
-            </Button>
+            <Button onClick={() => setCreating(true)}>Nuevo proyecto</Button>
           )
         }
       />
 
-      <div className="content stack">
-        <div className="filters">
-          <label className="field" style={{ flex: '1 1 260px' }}>
-            <span>Buscar</span>
-            <input
-              className="input"
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Nombre del conjunto o proyecto"
-            />
-          </label>
+      <PageBody>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+          <Field
+            label="Buscar"
+            className="col-span-2"
+            value={q}
+            onChange={(e) => setQ(e.target.value)}
+            placeholder="Nombre del conjunto o proyecto"
+          />
         </div>
 
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && !data && <Loading rows={5} />}
 
         {data && data.length === 0 && (
-          <Card>
-            <Empty
-              title="Todavía no hay proyectos"
-              action={
-                can('ADMIN', 'MANAGER') && (
-                  <Button variant="primary" onClick={() => setCreating(true)}>
-                    Crear el primero
-                  </Button>
-                )
-              }
-            >
-              Un proyecto agrupa las unidades de un mismo conjunto. Sirve para comparar sus
-              tipologías —«Tipo A, 3 alcobas, 78–84 m², desde $320 M»— y para que desde una ficha
-              se vea qué más hay en el mismo sitio.
-            </Empty>
-          </Card>
+          <Empty
+            title="Todavía no hay proyectos"
+            action={
+              can('ADMIN', 'MANAGER') && (
+                <Button onClick={() => setCreating(true)}>Crear el primero</Button>
+              )
+            }
+          >
+            Un proyecto agrupa las unidades de un mismo conjunto. Sirve para comparar sus
+            tipologías —«Tipo A, 3 alcobas, 78–84 m², desde $320 M»— y para que desde una ficha
+            se vea qué más hay en el mismo sitio.
+          </Empty>
         )}
 
         {data && data.length > 0 && (
           <Card flush>
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
-                  <tr>
-                    <th>Proyecto</th>
-                    <th>Tipo</th>
-                    <th>Estado</th>
-                    <th className="hide-sm">Ubicación</th>
-                    <th className="hide-sm">Constructora</th>
-                    <th className="num">Unidades</th>
-                    <th className="num hide-sm">Entrega</th>
-                    <th>Web</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {roots.map((family) => (
-                    <ProjectRows
-                      key={family.id}
-                      family={family}
-                      stages={stagesOf(family.id)}
-                      onOpen={(id) => navigate(`/proyectos/${id}`)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            </div>
+            <Table>
+              <THead>
+                <tr>
+                  <Th>Proyecto</Th>
+                  <Th>Tipo</Th>
+                  <Th>Estado</Th>
+                  <Th hideSm>Ubicación</Th>
+                  <Th hideSm>Constructora</Th>
+                  <Th num>Unidades</Th>
+                  <Th num hideSm>
+                    Entrega
+                  </Th>
+                  <Th>Web</Th>
+                </tr>
+              </THead>
+              <TBody>
+                {roots.map((family) => (
+                  <ProjectRows
+                    key={family.id}
+                    family={family}
+                    stages={stagesOf(family.id)}
+                    onOpen={(id) => navigate(`/proyectos/${id}`)}
+                  />
+                ))}
+              </TBody>
+            </Table>
           </Card>
         )}
-      </div>
+      </PageBody>
 
       {creating && (
         <ProjectForm
@@ -187,34 +188,35 @@ function Row({
   nested?: boolean;
 }) {
   return (
-    <tr className="clickable" onClick={() => onOpen(family.id)}>
-      <td style={{ paddingLeft: nested ? 30 : undefined }}>
+    <Tr onClick={() => onOpen(family.id)}>
+      {/* La sangria de la etapa es lo unico que dice que cuelga del proyecto. */}
+      <Td className={nested ? 'pl-8' : undefined}>
         {nested && <span className="note">└ </span>}
-        <strong>{family.name}</strong>
-        <div className="note" style={{ marginTop: 2 }}>
-          /{family.slug}
-        </div>
-      </td>
-      <td>
+        <strong className="font-medium">{family.name}</strong>
+        <div className="note mt-0.5">/{family.slug}</div>
+      </Td>
+      <Td>
         <Badge>{FAMILY_KIND_LABEL[family.kind]}</Badge>
-      </td>
-      <td>
+      </Td>
+      <Td>
         <Badge tone={STATUS_TONE[family.status]}>{FAMILY_STATUS_LABEL[family.status]}</Badge>
-      </td>
-      <td className="hide-sm">
+      </Td>
+      <Td hideSm>
         {[family.zone?.name, family.city?.name].filter(Boolean).join(', ') || '—'}
-      </td>
-      <td className="hide-sm">{family.developer ?? '—'}</td>
-      <td className="num">{family.totalUnits ? number(family.totalUnits) : '—'}</td>
-      <td className="num hide-sm">{family.deliveryYear ?? '—'}</td>
-      <td>
+      </Td>
+      <Td hideSm>{family.developer ?? '—'}</Td>
+      <Td num>{family.totalUnits ? number(family.totalUnits) : '—'}</Td>
+      <Td num hideSm>
+        {family.deliveryYear ?? '—'}
+      </Td>
+      <Td>
         {family.published ? (
           <Badge tone="green">visible</Badge>
         ) : (
           <Badge tone="neutral">oculto</Badge>
         )}
-      </td>
-    </tr>
+      </Td>
+    </Tr>
   );
 }
 
@@ -300,9 +302,10 @@ export function ProjectForm({
       wide
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
-            variant="primary"
             loading={busy}
             disabled={form.name.trim().length < 3}
             onClick={() => void save()}
@@ -312,8 +315,8 @@ export function ProjectForm({
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
         <Field
           label="Nombre"
@@ -325,7 +328,7 @@ export function ProjectForm({
           hint="La dirección web se genera desde el nombre"
         />
 
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
           <SelectField
             label="Tipo"
             value={form.kind}
@@ -368,7 +371,7 @@ export function ProjectForm({
           />
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}>
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
           <SelectField
             label="Ciudad"
             value={form.cityId}
@@ -424,14 +427,11 @@ export function ProjectForm({
           placeholder="Lo que distingue a este proyecto: zonas comunes, ubicación, acabados."
         />
 
-        <label className="check">
-          <input
-            type="checkbox"
-            checked={form.published}
-            onChange={(e) => setForm({ ...form, published: e.target.checked })}
-          />
-          Visible en la web pública
-        </label>
+        <CheckField
+          label="Visible en la web pública"
+          checked={form.published}
+          onChange={(e) => setForm({ ...form, published: e.target.checked })}
+        />
       </div>
     </Modal>
   );

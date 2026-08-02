@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { ApiError } from '../lib/api';
-import { Button, Field } from '../components/ui';
+import { Alert, Button, Field, SectionHeading } from '../components/ui';
+import { AuthFigure, AuthLayout } from '../components/AuthLayout';
 
 export function Login() {
   const { user, signIn, loading } = useAuth();
@@ -34,83 +35,57 @@ export function Login() {
   }
 
   return (
-    <div className="auth">
-      <aside className="auth-brand">
-        <div>
-          <span className="note" style={{ color: '#708d7f' }}>
-            Bucaramanga · Santander
-          </span>
-          <h1 style={{ marginTop: 10, fontSize: '2.5rem', color: '#fff' }}>
-            Serrano
-            <br />
-            Inmobiliaria
-          </h1>
-          <p
-            style={{
-              marginTop: 14,
-              maxWidth: '34ch',
-              color: '#9fb5aa',
-              fontSize: '0.9375rem',
-            }}
-          >
-            El inventario, la cartera y la agenda del equipo en un solo sitio.
-          </p>
+    <AuthLayout
+      eyebrow="Bucaramanga · Santander"
+      title={
+        <>
+          Serrano
+          <br />
+          Inmobiliaria
+        </>
+      }
+      lede="El inventario, la cartera y la agenda del equipo en un solo sitio."
+      aside={
+        <div className="flex flex-wrap gap-8">
+          <AuthFigure value="642" label="Inmuebles" />
+          <AuthFigure value="7.529" label="Clientes" />
+          <AuthFigure value="11" label="Portales" />
         </div>
+      }
+    >
+      <form className="flex flex-col gap-4" onSubmit={submit}>
+        <SectionHeading light="Acceso" strong="del equipo" as="h2" className="mb-1" />
 
-        <div className="auth-figures">
-          <div className="auth-figure">
-            <b>642</b>
-            <span>Inmuebles</span>
-          </div>
-          <div className="auth-figure">
-            <b>7.529</b>
-            <span>Clientes</span>
-          </div>
-          <div className="auth-figure">
-            <b>11</b>
-            <span>Portales</span>
-          </div>
-        </div>
-      </aside>
+        {error && <Alert>{error}</Alert>}
 
-      <main className="auth-form">
-        <form className="auth-box stack" onSubmit={submit}>
-          <div>
-            <span className="note">Acceso del equipo</span>
-            <h2 style={{ marginTop: 6 }}>Entra a tu cuenta</h2>
-          </div>
+        <Field
+          label="Correo"
+          type="email"
+          autoComplete="username"
+          required
+          autoFocus
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          placeholder="asesor@serrano-inmobiliaria.com"
+        />
+        <Field
+          label="Contraseña"
+          type="password"
+          autoComplete="current-password"
+          required
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
 
-          {error && <div className="alert">{error}</div>}
+        <Button type="submit" loading={busy} className="font-bold tracking-widest uppercase">
+          Entrar
+        </Button>
 
-          <Field
-            label="Correo"
-            type="email"
-            autoComplete="username"
-            required
-            autoFocus
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            placeholder="asesor@serrano-inmobiliaria.com"
-          />
-          <Field
-            label="Contraseña"
-            type="password"
-            autoComplete="current-password"
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-
-          <Button type="submit" variant="primary" loading={busy}>
-            Entrar
-          </Button>
-
-          <p className="field-hint">
-            ¿Es tu primera vez? Entra con la clave que te dio la administración; la
-            aplicación te pedirá cambiarla.
-          </p>
-        </form>
-      </main>
-    </div>
+        <p className="text-xs text-muted-foreground">
+          ¿Es tu primera vez? Entra con la clave que te dio la administración; la
+          aplicación te pedirá cambiarla.
+        </p>
+      </form>
+    </AuthLayout>
   );
 }

@@ -2,7 +2,21 @@ import { Link } from 'react-router-dom';
 import { api, type CoverageRow } from '../lib/api';
 import { useFetch } from '../lib/useFetch';
 import { PageHeader } from '../components/Shell';
-import { Badge, Card, Empty, ErrorNote, Loading, Stat } from '../components/ui';
+import {
+  Badge,
+  Card,
+  Empty,
+  ErrorNote,
+  Loading,
+  PageBody,
+  Stat,
+  Table,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
+} from '../components/ui';
 import { number } from '../lib/format';
 
 interface Gap {
@@ -32,16 +46,13 @@ export function Portals() {
     <>
       <PageHeader eyebrow="Difusión" title="Portales" />
 
-      <div className="content stack">
+      <PageBody>
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && <Loading rows={5} />}
 
         {data && (
           <>
-            <div
-              className="grid"
-              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}
-            >
+            <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
               <Stat
                 label="Portales en uso"
                 value={number(data.coverage.length)}
@@ -66,31 +77,31 @@ export function Portals() {
               flush
             >
               {data.coverage.length === 0 ? (
-                <Empty title="Ningún inmueble publicado">
-                  Abre la ficha de un inmueble y elige en qué portales debe aparecer.
-                </Empty>
+                <div className="p-5">
+                  <Empty title="Ningún inmueble publicado">
+                    Abre la ficha de un inmueble y elige en qué portales debe aparecer.
+                  </Empty>
+                </div>
               ) : (
-                <div className="card-body stack" style={{ gap: 11 }}>
+                <div className="flex flex-col gap-3 p-5">
                   {data.coverage.map((row) => (
                     <div key={row.portalId}>
-                      <div className="row spread" style={{ gap: 10 }}>
-                        <span className="row" style={{ gap: 7, fontSize: 'var(--t-small)' }}>
-                          <strong>{row.portal}</strong>
+                      <div className="flex items-center justify-between gap-2.5">
+                        <span className="flex items-center gap-1.5 text-sm">
+                          <strong className="font-medium">{row.portal}</strong>
                           {row.paid && <Badge tone="amber">de pago</Badge>}
                         </span>
-                        <span className="figure small">
+                        <span className="tabular text-sm whitespace-nowrap">
                           {number(row.total)}
                           {row.published > 0 && (
                             <span className="note"> · {number(row.published)} confirmados</span>
                           )}
                         </span>
                       </div>
-                      <div className="board-gauge" style={{ marginTop: 6 }}>
+                      <div className="gauge mt-1.5">
                         <i
-                          style={{
-                            width: `${(row.total / maxTotal) * 100}%`,
-                            background: row.paid ? 'var(--amber)' : 'var(--green)',
-                          }}
+                          className={row.paid ? 'bg-amber-600' : 'bg-emerald-600'}
+                          style={{ width: `${(row.total / maxTotal) * 100}%` }}
                         />
                       </div>
                     </div>
@@ -105,35 +116,37 @@ export function Portals() {
               flush
             >
               {data.gaps.length === 0 ? (
-                <Empty title="Todo publicado">
-                  Cada inmueble activo está al menos en un portal.
-                </Empty>
-              ) : (
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead>
-                      <tr>
-                        <th>Código</th>
-                        <th>Inmueble</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.gaps.map((gap) => (
-                        <tr key={gap.id}>
-                          <td className="figure">{gap.code}</td>
-                          <td>
-                            <Link to={`/inmuebles/${gap.id}`}>{gap.title}</Link>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
+                <div className="p-5">
+                  <Empty title="Todo publicado">
+                    Cada inmueble activo está al menos en un portal.
+                  </Empty>
                 </div>
+              ) : (
+                <Table>
+                    <THead>
+                      <tr>
+                        <Th>Código</Th>
+                        <Th>Inmueble</Th>
+                      </tr>
+                    </THead>
+                    <TBody>
+                      {data.gaps.map((gap) => (
+                        <Tr key={gap.id}>
+                          <Td className="tabular">{gap.code}</Td>
+                          <Td>
+                            <Link to={`/inmuebles/${gap.id}`} className="hover:underline">
+                              {gap.title}
+                            </Link>
+                          </Td>
+                        </Tr>
+                      ))}
+                    </TBody>
+                </Table>
               )}
             </Card>
           </>
         )}
-      </div>
+      </PageBody>
     </>
   );
 }

@@ -1,4 +1,5 @@
 import { useRef, useState } from 'react';
+import { Bath, BedDouble, Car, ExternalLink, Ruler } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ApiError,
@@ -14,14 +15,22 @@ import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Badge,
   Button,
   Card,
+  CheckField,
   Empty,
   ErrorNote,
+  Field,
   Loading,
   Modal,
+  PageBody,
   SelectField,
+  Table,
+  TBody,
+  Td,
+  Tr,
 } from '../components/ui';
 import {
   AVAILABILITY_LABEL,
@@ -71,9 +80,9 @@ export function PropertyDetail() {
   if (loading) return <Loading rows={8} />;
   if (error || !data) {
     return (
-      <div className="content">
+      <PageBody>
         <ErrorNote onRetry={reload}>{error ?? 'Inmueble no encontrado'}</ErrorNote>
-      </div>
+      </PageBody>
     );
   }
 
@@ -131,49 +140,55 @@ export function PropertyDetail() {
         title={property.title}
         actions={
           <>
-            <Button onClick={() => navigate('/inmuebles')}>Volver</Button>
+            <Button variant="outline" onClick={() => navigate('/inmuebles')}>
+              Volver
+            </Button>
             {property.publicUrl && (
-              <a
-                className="btn"
-                href={property.publicUrl}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                Ver ficha pública
-              </a>
+              <Button asChild variant="outline">
+                <a href={property.publicUrl} target="_blank" rel="noreferrer noopener">
+                  <ExternalLink />
+                  Ver ficha pública
+                </a>
+              </Button>
             )}
             {/* Un asesor puede clasificar su propio inmueble; reasignarlo a
                 otra persona es decision de coordinacion. */}
             {editable && (
-              <Button onClick={() => setLinkingFamily(true)}>Proyecto</Button>
+              <Button variant="outline" onClick={() => setLinkingFamily(true)}>
+                Proyecto
+              </Button>
             )}
             {can('ADMIN', 'MANAGER') && (
-              <Button onClick={() => setAssigning(true)}>Reasignar</Button>
+              <Button variant="outline" onClick={() => setAssigning(true)}>
+                Reasignar
+              </Button>
             )}
             {editable && (
-              <Button variant="primary" onClick={() => navigate(`/inmuebles/${id}/editar`)}>
-                Editar
-              </Button>
+              <Button onClick={() => navigate(`/inmuebles/${id}/editar`)}>Editar</Button>
             )}
           </>
         }
       />
 
-      <div className="content stack">
-        <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1fr)' }}>
-          <div className="stack">
-            <Card flush>
-              <div style={{ aspectRatio: '16 / 10', background: 'var(--surface-2)' }}>
+      <PageBody>
+        {/* Hasta 992px las dos columnas se apilan. Antes eran fijas y a 400px
+            la ficha tecnica quedaba en una columna de 130px. */}
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)]">
+          <div className="flex flex-col gap-5">
+            <Card flush className="overflow-hidden">
+              <div className="aspect-[16/10] bg-secondary">
                 {cover ? (
                   <img
                     src={cover.urlLarge ?? cover.url}
                     alt=""
-                    style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+                    className="block size-full object-cover"
                   />
                 ) : (
-                  <div className="empty">
-                    <h3>Sin fotografías</h3>
-                    <p>Un inmueble sin fotos no se publica en ningún portal.</p>
+                  <div className="flex size-full flex-col items-center justify-center gap-2 text-center">
+                    <p className="font-medium">Sin fotografías</p>
+                    <p className="text-sm text-muted-foreground">
+                      Un inmueble sin fotos no se publica en ningún portal.
+                    </p>
                   </div>
                 )}
               </div>
@@ -195,6 +210,7 @@ export function PropertyDetail() {
               action={
                 editable && (
                   <Button
+                    variant="outline"
                     size="sm"
                     loading={uploading}
                     onClick={() => fileInput.current?.click()}
@@ -204,40 +220,46 @@ export function PropertyDetail() {
                 )
               }
             >
-              <div className="stack">
-                {uploadError && <div className="alert alert-warn">{uploadError}</div>}
+              <div className="flex flex-col gap-4">
+                {uploadError && <Alert tone="warn">{uploadError}</Alert>}
                 {(property.images?.length ?? 0) === 0 ? (
                   <p className="note">
                     Aún no hay fotos. Se guardan en el servidor y se sirven desde aquí.
                   </p>
                 ) : (
-                <div className="gallery">
-                  {property.images.map((image) => (
-                    <figure key={image.id}>
-                      <img src={image.url} alt={image.description ?? ''} loading="lazy" />
-                      {image.isMain && (
-                        <figcaption>
-                          <Badge tone="ink">Portada</Badge>
-                        </figcaption>
-                      )}
-                    </figure>
-                  ))}
-                </div>
+                  <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
+                    {property.images.map((image) => (
+                      <figure
+                        key={image.id}
+                        className="relative m-0 aspect-[4/3] overflow-hidden rounded-md border"
+                      >
+                        <img
+                          src={image.url}
+                          alt={image.description ?? ''}
+                          loading="lazy"
+                          className="size-full object-cover"
+                        />
+                        {image.isMain && (
+                          <figcaption className="absolute top-1.5 left-1.5">
+                            <Badge tone="ink">Portada</Badge>
+                          </figcaption>
+                        )}
+                      </figure>
+                    ))}
+                  </div>
                 )}
               </div>
             </Card>
 
             {property.observations && (
               <Card title="Descripción">
-                <p style={{ whiteSpace: 'pre-wrap', fontSize: 'var(--t-small)' }}>
-                  {property.observations}
-                </p>
+                <p className="text-sm whitespace-pre-wrap">{property.observations}</p>
               </Card>
             )}
 
             {property.features && property.features.length > 0 && (
               <Card title={`Características · ${property.features.length}`}>
-                <div className="row row-wrap" style={{ gap: 6 }}>
+                <div className="flex flex-wrap gap-1.5">
                   {property.features.map((feature) => (
                     <Badge key={feature.id} tone={feature.scope === 'INTERNAL' ? 'neutral' : 'blue'}>
                       {feature.name}
@@ -248,15 +270,12 @@ export function PropertyDetail() {
             )}
           </div>
 
-          <div className="stack">
+          <div className="flex flex-col gap-5 lg:sticky lg:top-24 lg:self-start">
             <Card>
-              <div className="stack" style={{ gap: 12 }}>
+              <div className="flex flex-col gap-3">
                 <div>
                   <span className="note">Precio de venta</span>
-                  <div
-                    className="figure"
-                    style={{ fontSize: '1.75rem', letterSpacing: '-0.03em', marginTop: 2 }}
-                  >
+                  <div className="tabular mt-0.5 text-3xl leading-none font-normal tracking-tight">
                     {money(property.salePrice)}
                   </div>
                   {property.maintenanceFee ? (
@@ -266,7 +285,7 @@ export function PropertyDetail() {
                   ) : null}
                 </div>
 
-                <div className="row row-wrap" style={{ gap: 6 }}>
+                <div className="flex flex-wrap gap-1.5">
                   <Badge tone={AVAILABILITY_TONE[property.availability]}>
                     {AVAILABILITY_LABEL[property.availability]}
                   </Badge>
@@ -282,31 +301,17 @@ export function PropertyDetail() {
                     )}
                 </div>
 
-                <div className="prop-specs" style={{ paddingTop: 12 }}>
-                  <span className="prop-spec">
-                    <b>{property.area ? number(property.area) : '—'}</b>
-                    <span>m² totales</span>
-                  </span>
-                  <span className="prop-spec">
-                    <b>{property.bedrooms ?? '—'}</b>
-                    <span>alcobas</span>
-                  </span>
-                  <span className="prop-spec">
-                    <b>{property.bathrooms ?? '—'}</b>
-                    <span>baños</span>
-                  </span>
-                  <span className="prop-spec">
-                    <b>{property.garages ?? '—'}</b>
-                    <span>garajes</span>
-                  </span>
+                <div className="-mx-5 -mb-5 mt-1 grid grid-cols-2 gap-x-4 gap-y-2 border-t bg-secondary/50 px-5 py-3 text-xs">
+                  <Spec icon={Ruler} value={property.area ? area(property.area) : null} />
+                  <Spec icon={BedDouble} value={property.bedrooms} unit="alcobas" />
+                  <Spec icon={Bath} value={property.bathrooms} unit="baños" />
+                  <Spec icon={Car} value={property.garages} unit="garajes" />
                 </div>
               </div>
             </Card>
 
-            <Card title="Ficha técnica" flush>
-              <div className="table-wrap">
-                <table className="data">
-                  <tbody>
+            <Card title="Ficha técnica">
+              <dl className="grid">
                     <Row label="Tipo" value={property.propertyType.name} />
                     <Row
                       label="Ubicación"
@@ -340,16 +345,14 @@ export function PropertyDetail() {
                           : 'Sin asignar'
                       }
                     />
-                  </tbody>
-                </table>
-              </div>
+              </dl>
             </Card>
 
             <Card
               title={`Portales · ${publications.length}`}
               action={
                 editable && (
-                  <Button size="sm" onClick={() => setPublishing(true)}>
+                  <Button variant="outline" size="sm" onClick={() => setPublishing(true)}>
                     Gestionar
                   </Button>
                 )
@@ -357,17 +360,18 @@ export function PropertyDetail() {
               flush
             >
               {publications.length === 0 ? (
-                <Empty title="Sin publicar">
-                  Este inmueble no está en ningún portal, así que no lo está viendo nadie.
-                </Empty>
+                <div className="p-5">
+                  <Empty title="Sin publicar">
+                    Este inmueble no está en ningún portal, así que no lo está viendo nadie.
+                  </Empty>
+                </div>
               ) : (
-                <div className="table-wrap">
-                  <table className="data">
-                    <tbody>
+                <Table>
+                    <TBody>
                       {publications.map((publication) => (
-                        <tr key={publication.id}>
-                          <td>{publication.portal.name}</td>
-                          <td style={{ width: 110 }}>
+                        <Tr key={publication.id}>
+                          <Td>{publication.portal.name}</Td>
+                          <Td className="w-[110px]">
                             <Badge
                               tone={
                                 publication.state === 'PUBLISHED'
@@ -385,12 +389,11 @@ export function PropertyDetail() {
                                     ? 'Rechazado'
                                     : 'Pausado'}
                             </Badge>
-                          </td>
-                        </tr>
+                          </Td>
+                        </Tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </TBody>
+                </Table>
               )}
             </Card>
 
@@ -398,78 +401,86 @@ export function PropertyDetail() {
               <Card
                 title={`Otras unidades de ${property.family.name}`}
                 action={
-                  <Link to={`/proyectos/${property.familyId}`} className="btn btn-sm btn-ghost">
-                    Ver proyecto
-                  </Link>
+                  <Button asChild variant="ghost" size="sm">
+                    <Link to={`/proyectos/${property.familyId}`}>Ver proyecto</Link>
+                  </Button>
                 }
                 flush
               >
                 {siblings.length === 0 ? (
-                  <Empty title="Es la única unidad">
-                    Cuando asignes más inmuebles a este proyecto aparecerán aquí para comparar.
-                  </Empty>
+                  <div className="p-5">
+                    <Empty title="Es la única unidad">
+                      Cuando asignes más inmuebles a este proyecto aparecerán aquí para comparar.
+                    </Empty>
+                  </div>
                 ) : (
-                  <div className="table-wrap">
-                    <table className="data">
-                      <tbody>
+                  <Table>
+                      <TBody>
                         {siblings.map((sibling) => (
-                          <tr key={sibling.id}>
-                            <td className="figure" style={{ width: 88 }}>
-                              <Link to={`/inmuebles/${sibling.id}`}>{sibling.code}</Link>
-                            </td>
-                            <td>
+                          <Tr key={sibling.id}>
+                            <Td className="tabular w-[88px]">
+                              <Link
+                                to={`/inmuebles/${sibling.id}`}
+                                className="hover:underline"
+                              >
+                                {sibling.code}
+                              </Link>
+                            </Td>
+                            <Td>
                               {sibling.unitType ?? sibling.propertyType.name}
-                              <div className="note" style={{ marginTop: 2 }}>
+                              <div className="note mt-0.5">
                                 {sibling.bedrooms ?? '—'} alcobas · piso {sibling.floor ?? '—'}
                               </div>
-                            </td>
-                            <td className="num">{area(sibling.area)}</td>
-                            <td className="num">{money(sibling.salePrice)}</td>
-                          </tr>
+                            </Td>
+                            <Td num>{area(sibling.area)}</Td>
+                            <Td num>{money(sibling.salePrice)}</Td>
+                          </Tr>
                         ))}
-                      </tbody>
-                    </table>
-                  </div>
+                      </TBody>
+                  </Table>
                 )}
               </Card>
             )}
 
             <Card title={`Clientes vinculados · ${interests.length}`} flush>
               {interests.length === 0 ? (
-                <Empty title="Nadie interesado todavía">
-                  Vincula clientes desde su ficha para hacer seguimiento del inmueble.
-                </Empty>
+                <div className="p-5">
+                  <Empty title="Nadie interesado todavía">
+                    Vincula clientes desde su ficha para hacer seguimiento del inmueble.
+                  </Empty>
+                </div>
               ) : (
-                <div className="table-wrap">
-                  <table className="data">
-                    <tbody>
+                <Table>
+                    <TBody>
                       {interests.map((interest) => (
-                        <tr key={interest.id}>
-                          <td>
+                        <Tr key={interest.id}>
+                          <Td>
                             {interest.client ? (
-                              <Link to={`/clientes/${interest.clientId}`}>
+                              <Link
+                                to={`/clientes/${interest.clientId}`}
+                                className="hover:underline"
+                              >
                                 {interest.client.firstName} {interest.client.lastName ?? ''}
                               </Link>
                             ) : (
                               '—'
                             )}
-                          </td>
-                          <td style={{ width: 110 }}>
+                          </Td>
+                          <Td className="w-[110px]">
                             <Badge>{INTEREST_ROLE_LABEL[interest.role]}</Badge>
-                          </td>
-                          <td style={{ width: 100 }} className="note">
+                          </Td>
+                          <Td className="note w-[100px]">
                             {INTEREST_STATUS_LABEL[interest.status]}
-                          </td>
-                        </tr>
+                          </Td>
+                        </Tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </TBody>
+                </Table>
               )}
             </Card>
           </div>
         </div>
-      </div>
+      </PageBody>
 
       {assigning && (
         <AssignModal
@@ -511,14 +522,33 @@ export function PropertyDetail() {
   );
 }
 
+/** Una fila de la ficha tecnica: rotulo a la izquierda, dato a la derecha. */
 function Row({ label, value }: { label: string; value: string | number }) {
   return (
-    <tr>
-      <td className="note" style={{ width: '45%' }}>
-        {label}
-      </td>
-      <td>{value}</td>
-    </tr>
+    <div className="flex items-baseline justify-between gap-4 border-b py-2.5 text-sm last:border-b-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="tabular text-right font-medium">{value}</dd>
+    </div>
+  );
+}
+
+/** Una cifra con su icono, igual que en la tarjeta del listado. */
+function Spec({
+  icon: Icon,
+  value,
+  unit,
+}: {
+  icon: typeof Ruler;
+  value: string | number | null | undefined;
+  unit?: string;
+}) {
+  if (!value) return null;
+  const text = unit ? `${value} ${unit}` : String(value);
+  return (
+    <div className="flex min-w-0 items-center gap-1.5 text-muted-foreground" title={text}>
+      <Icon className="size-3.5 shrink-0" aria-hidden />
+      <span className="tabular truncate text-foreground">{text}</span>
+    </div>
   );
 }
 
@@ -558,9 +588,10 @@ function AssignModal({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
-            variant="primary"
             loading={busy}
             disabled={!agentId || agentId === currentAgentId}
             onClick={() => void save()}
@@ -570,8 +601,8 @@ function AssignModal({
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
         <SelectField
           label="Nuevo asesor"
           value={agentId}
@@ -584,18 +615,13 @@ function AssignModal({
             </option>
           ))}
         </SelectField>
-        <label className="field">
-          <span>Motivo</span>
-          <input
-            className="input"
-            value={reason}
-            onChange={(e) => setReason(e.target.value)}
-            placeholder="Traslado de cartera, vacaciones…"
-          />
-          <span className="field-hint">
-            Queda en el histórico del inmueble junto a quien lo captó.
-          </span>
-        </label>
+        <Field
+          label="Motivo"
+          value={reason}
+          onChange={(e) => setReason(e.target.value)}
+          placeholder="Traslado de cartera, vacaciones…"
+          hint="Queda en el histórico del inmueble junto a quien lo captó."
+        />
       </div>
     </Modal>
   );
@@ -643,26 +669,30 @@ function PublishModal({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" loading={busy} onClick={() => void save()}>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button loading={busy} onClick={() => void save()}>
             Guardar {selected.length} portal{selected.length === 1 ? '' : 'es'}
           </Button>
         </>
       }
     >
-      <div className="stack" style={{ gap: 8 }}>
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-2">
+        {error && <Alert>{error}</Alert>}
         {(catalogs.data?.portals ?? []).map((portal) => (
-          <label key={portal.id} className="check">
-            <input
-              type="checkbox"
-              checked={selected.includes(portal.id)}
-              onChange={() => toggle(portal.id)}
-            />
-            <span>{portal.name}</span>
-            {portal.paid && <Badge tone="amber">de pago</Badge>}
-            {!portal.connected && <Badge tone="red">sin conectar</Badge>}
-          </label>
+          <CheckField
+            key={portal.id}
+            checked={selected.includes(portal.id)}
+            onChange={() => toggle(portal.id)}
+            label={
+              <span className="flex items-center gap-2">
+                {portal.name}
+                {portal.paid && <Badge tone="amber">de pago</Badge>}
+                {!portal.connected && <Badge tone="red">sin conectar</Badge>}
+              </span>
+            }
+          />
         ))}
       </div>
     </Modal>
@@ -720,15 +750,17 @@ function FamilyModal({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" loading={busy} onClick={() => void save()}>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button loading={busy} onClick={() => void save()}>
             Guardar
           </Button>
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
         <SelectField
           label="Proyecto"
@@ -745,24 +777,19 @@ function FamilyModal({
           ))}
         </SelectField>
 
-        <label className="field">
-          <span>Tipología</span>
-          <input
-            className="input"
-            value={unitType}
-            onChange={(e) => setUnitType(e.target.value)}
-            placeholder="Tipo A"
-            disabled={!familyId}
-          />
-          <span className="field-hint">
-            Agrupa las unidades iguales dentro del proyecto.
-          </span>
-        </label>
+        <Field
+          label="Tipología"
+          value={unitType}
+          onChange={(e) => setUnitType(e.target.value)}
+          placeholder="Tipo A"
+          disabled={!familyId}
+          hint="Agrupa las unidades iguales dentro del proyecto."
+        />
 
         {(families.data ?? []).length === 0 && (
-          <div className="alert alert-warn">
+          <Alert tone="warn">
             Todavía no hay proyectos creados. Créalos en Proyectos y vuelve aquí.
-          </div>
+          </Alert>
         )}
       </div>
     </Modal>

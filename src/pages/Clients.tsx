@@ -14,17 +14,26 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Badge,
   Button,
   Card,
+  CheckField,
   Empty,
   ErrorNote,
   Field,
   Loading,
   Modal,
+  PageBody,
   Pager,
   SelectField,
+  Table,
+  TBody,
+  Td,
   TextareaField,
+  Th,
+  THead,
+  Tr,
 } from '../components/ui';
 import { relative } from '../lib/format';
 
@@ -116,195 +125,163 @@ export function Clients() {
         title="Clientes"
         actions={
           can('ADMIN', 'MANAGER', 'AGENT') && (
-            <Button variant="primary" onClick={() => setCreating(true)}>
-              Nuevo cliente
-            </Button>
+            <Button onClick={() => setCreating(true)}>Nuevo cliente</Button>
           )
         }
       />
 
-      <div className="content stack">
-        <div className="filters">
-          <label className="field" style={{ flex: '1 1 240px' }}>
-            <span>Buscar</span>
-            <input
-              className="input"
-              value={filters.q}
-              onChange={(e) => set('q', e.target.value)}
-              placeholder="Nombre, correo, teléfono o cédula"
-            />
-          </label>
+      <PageBody>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+          <Field
+            label="Buscar"
+            className="col-span-2"
+            value={filters.q}
+            onChange={(e) => set('q', e.target.value)}
+            placeholder="Nombre, correo, teléfono o cédula"
+          />
 
-          <label className="field" style={{ flex: '0 1 180px' }}>
-            <span>Embudo</span>
-            <select
-              className="select"
-              value={filters.pipelineId}
-              onChange={(e) => {
-                set('pipelineId', e.target.value);
-                set('stageId', '');
-              }}
-            >
-              <option value="">Todos</option>
-              {(pipelines.data ?? []).map((pipeline) => (
-                <option key={pipeline.id} value={pipeline.id}>
-                  {pipeline.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="Embudo"
+            value={filters.pipelineId}
+            onChange={(e) => {
+              set('pipelineId', e.target.value);
+              set('stageId', '');
+            }}
+          >
+            <option value="">Todos</option>
+            {(pipelines.data ?? []).map((pipeline) => (
+              <option key={pipeline.id} value={pipeline.id}>
+                {pipeline.name}
+              </option>
+            ))}
+          </SelectField>
 
-          <label className="field" style={{ flex: '0 1 170px' }}>
-            <span>Etapa</span>
-            <select
-              className="select"
-              value={filters.stageId}
-              onChange={(e) => set('stageId', e.target.value)}
-              disabled={!selectedPipeline}
-            >
-              <option value="">Todas</option>
-              {(selectedPipeline?.stages ?? []).map((stage) => (
-                <option key={stage.id} value={stage.id}>
-                  {stage.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="Etapa"
+            value={filters.stageId}
+            onChange={(e) => set('stageId', e.target.value)}
+            disabled={!selectedPipeline}
+          >
+            <option value="">Todas</option>
+            {(selectedPipeline?.stages ?? []).map((stage) => (
+              <option key={stage.id} value={stage.id}>
+                {stage.name}
+              </option>
+            ))}
+          </SelectField>
 
-          <label className="field" style={{ flex: '0 1 170px' }}>
-            <span>Origen</span>
-            <select
-              className="select"
-              value={filters.sourceId}
-              onChange={(e) => set('sourceId', e.target.value)}
-            >
-              <option value="">Todos</option>
-              {(sources.data ?? []).map((source) => (
-                <option key={source.id} value={source.id}>
-                  {source.name}
-                </option>
-              ))}
-            </select>
-          </label>
+          <SelectField
+            label="Origen"
+            value={filters.sourceId}
+            onChange={(e) => set('sourceId', e.target.value)}
+          >
+            <option value="">Todos</option>
+            {(sources.data ?? []).map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.name}
+              </option>
+            ))}
+          </SelectField>
 
           {can('ADMIN', 'MANAGER', 'VIEWER') && (
-            <label className="field" style={{ flex: '0 1 170px' }}>
-              <span>Asesor</span>
-              <select
-                className="select"
-                value={filters.assignedAgentId}
-                onChange={(e) => set('assignedAgentId', e.target.value)}
-              >
-                <option value="">Todos</option>
-                {(agents.data ?? []).map((agent) => (
-                  <option key={agent.id} value={agent.id}>
-                    {agent.firstName} {agent.lastName ?? ''}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <SelectField
+              label="Asesor"
+              value={filters.assignedAgentId}
+              onChange={(e) => set('assignedAgentId', e.target.value)}
+            >
+              <option value="">Todos</option>
+              {(agents.data ?? []).map((agent) => (
+                <option key={agent.id} value={agent.id}>
+                  {agent.firstName} {agent.lastName ?? ''}
+                </option>
+              ))}
+            </SelectField>
           )}
 
-          <div className="row" style={{ gap: 12, paddingBottom: 8 }}>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={filters.openOnly}
-                onChange={(e) => set('openOnly', e.target.checked)}
-              />
-              Solo abiertos
-            </label>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={Boolean(filters.staleSince)}
-                onChange={(e) => set('staleSince', e.target.checked ? staleCutoff() : '')}
-              />
-              Sin contacto en 30 días
-            </label>
+          <div className="col-span-2 flex flex-wrap items-end gap-4 pb-2">
+            <CheckField
+              label="Solo abiertos"
+              checked={filters.openOnly}
+              onChange={(e) => set('openOnly', e.target.checked)}
+            />
+            <CheckField
+              label="Sin contacto en 30 días"
+              checked={Boolean(filters.staleSince)}
+              onChange={(e) => set('staleSince', e.target.checked ? staleCutoff() : '')}
+            />
           </div>
         </div>
 
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && !data && <Loading rows={8} />}
 
-        {data && (
+        {data && data.data.length === 0 && (
+          <Empty
+            title="Ningún cliente coincide"
+            action={
+              <Button variant="outline" onClick={() => setFilters(EMPTY)}>
+                Quitar los filtros
+              </Button>
+            }
+          >
+            Prueba con otro embudo o busca por teléfono.
+          </Empty>
+        )}
+
+        {data && data.data.length > 0 && (
           <Card flush>
-            {data.data.length === 0 ? (
-              <Empty
-                title="Ningún cliente coincide"
-                action={
-                  <Button onClick={() => setFilters(EMPTY)}>Quitar los filtros</Button>
-                }
-              >
-                Prueba con otro embudo o busca por teléfono.
-              </Empty>
-            ) : (
-              <>
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead>
-                      <tr>
-                        <th>Cliente</th>
-                        <th className="hide-sm">Contacto</th>
-                        <th>Etapa</th>
-                        <th className="hide-sm">Origen</th>
-                        <th className="hide-sm">Asesor</th>
-                        <th className="num">Último contacto</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.data.map((client) => (
-                        <tr
-                          key={client.id}
-                          className="clickable"
-                          onClick={() => navigate(`/clientes/${client.id}`)}
-                        >
-                          <td>
-                            <strong>
-                              {client.firstName} {client.lastName ?? ''}
-                            </strong>
-                            {client.types.length > 0 && (
-                              <div className="note" style={{ marginTop: 2 }}>
-                                {client.types.map((t) => t.name).join(' · ')}
-                              </div>
-                            )}
-                          </td>
-                          <td className="hide-sm">
-                            <span className="figure small">
-                              {client.cellPhone ?? client.phone ?? '—'}
-                            </span>
-                            {client.email && (
-                              <div className="note" style={{ marginTop: 2 }}>
-                                {client.email}
-                              </div>
-                            )}
-                          </td>
-                          <td>
-                            <Badge color={client.stage.color}>{client.stage.name}</Badge>
-                          </td>
-                          <td className="hide-sm">{client.source?.name ?? '—'}</td>
-                          <td className="hide-sm">{client.assignedAgent?.firstName ?? '—'}</td>
-                          <td className="num small muted">
-                            {client.lastContactedAt ? relative(client.lastContactedAt) : 'nunca'}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <Pager
-                  page={data.meta.page}
-                  pages={data.meta.pages}
-                  total={data.meta.total}
-                  unit="clientes"
-                  onPage={setPage}
-                />
-              </>
-            )}
+            <Table>
+              <THead>
+                <tr>
+                  <Th>Cliente</Th>
+                  <Th hideSm>Contacto</Th>
+                  <Th>Etapa</Th>
+                  <Th hideSm>Origen</Th>
+                  <Th hideSm>Asesor</Th>
+                  <Th num>Último contacto</Th>
+                </tr>
+              </THead>
+              <TBody>
+                {data.data.map((client) => (
+                  <Tr key={client.id} onClick={() => navigate(`/clientes/${client.id}`)}>
+                    <Td>
+                      <strong className="font-medium">
+                        {client.firstName} {client.lastName ?? ''}
+                      </strong>
+                      {client.types.length > 0 && (
+                        <div className="note mt-0.5">
+                          {client.types.map((t) => t.name).join(' · ')}
+                        </div>
+                      )}
+                    </Td>
+                    <Td hideSm>
+                      <span className="tabular">
+                        {client.cellPhone ?? client.phone ?? '—'}
+                      </span>
+                      {client.email && <div className="note mt-0.5">{client.email}</div>}
+                    </Td>
+                    <Td>
+                      <Badge color={client.stage.color}>{client.stage.name}</Badge>
+                    </Td>
+                    <Td hideSm>{client.source?.name ?? '—'}</Td>
+                    <Td hideSm>{client.assignedAgent?.firstName ?? '—'}</Td>
+                    <Td num className="text-muted-foreground">
+                      {client.lastContactedAt ? relative(client.lastContactedAt) : 'nunca'}
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </Table>
+            <Pager
+              page={data.meta.page}
+              pages={data.meta.pages}
+              total={data.meta.total}
+              unit="clientes"
+              onPage={setPage}
+            />
           </Card>
         )}
-      </div>
+      </PageBody>
 
       {creating && (
         <NewClientModal
@@ -377,9 +354,10 @@ function NewClientModal({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
-            variant="primary"
             loading={busy}
             disabled={!form.firstName.trim()}
             onClick={() => void save()}
@@ -389,10 +367,10 @@ function NewClientModal({
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="grid gap-4 grid-cols-1 sm:grid-cols-2">
           <Field
             label="Nombre"
             required
@@ -444,9 +422,9 @@ function NewClientModal({
           </SelectField>
         </div>
 
-        <div className="field">
-          <label>Tipo de cliente</label>
-          <div className="row row-wrap" style={{ gap: 6 }}>
+        <div className="grid gap-1.5">
+          <span className="micro-label text-muted-foreground">Tipo de cliente</span>
+          <div className="flex flex-wrap gap-1.5">
             {(catalogs.data?.clientTypes ?? []).map((type) => {
               const active = form.typeIds.includes(type.id);
               return (
@@ -454,6 +432,7 @@ function NewClientModal({
                   key={type.id}
                   type="button"
                   aria-pressed={active}
+                  className="cursor-pointer"
                   onClick={() =>
                     setForm({
                       ...form,
@@ -462,9 +441,8 @@ function NewClientModal({
                         : [...form.typeIds, type.id],
                     })
                   }
-                  style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
                 >
-                  <Badge tone={active ? 'green' : 'neutral'}>{type.name}</Badge>
+                  <Badge tone={active ? 'ink' : 'neutral'}>{type.name}</Badge>
                 </button>
               );
             })}

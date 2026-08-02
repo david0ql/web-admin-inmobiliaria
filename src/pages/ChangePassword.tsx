@@ -2,7 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { ApiError } from '../lib/api';
-import { Button, Field } from '../components/ui';
+import { Alert, Button, Field, SectionHeading } from '../components/ui';
+import { AuthLayout } from '../components/AuthLayout';
 
 /**
  * Cambio obligatorio de la clave inicial.
@@ -58,86 +59,71 @@ export function ChangePassword() {
   }
 
   return (
-    <div className="auth">
-      <aside className="auth-brand">
+    <AuthLayout
+      eyebrow="Seguridad"
+      title={
+        <>
+          Elige tu
+          <br />
+          contraseña
+        </>
+      }
+      lede="La clave con la que entraste la comparte todo el equipo. Mientras siga siendo esa, tu cuenta no puede ver ni la cartera ni el inventario."
+      aside={<span className="note text-white/40">Mínimo 8 caracteres</span>}
+    >
+      <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
-          <span className="note" style={{ color: '#708d7f' }}>
-            Seguridad
-          </span>
-          <h1 style={{ marginTop: 10, fontSize: '2.25rem', color: '#fff' }}>
-            Elige tu
-            <br />
-            contraseña
-          </h1>
-          <p
-            style={{
-              marginTop: 14,
-              maxWidth: '36ch',
-              color: '#9fb5aa',
-              fontSize: '0.9375rem',
-            }}
-          >
-            La clave con la que entraste la comparte todo el equipo. Mientras siga siendo
-            esa, tu cuenta no puede ver ni la cartera ni el inventario.
-          </p>
+          <span className="note">{user?.email}</span>
+          <SectionHeading
+            light={forced ? 'Cambia la' : 'Cambiar'}
+            strong={forced ? 'clave inicial' : 'contraseña'}
+            as="h2"
+            className="mt-1 mb-1"
+          />
         </div>
-        <span className="note" style={{ color: '#5f776b' }}>
-          Mínimo 8 caracteres
-        </span>
-      </aside>
 
-      <main className="auth-form">
-        <form className="auth-box stack" onSubmit={submit}>
-          <div>
-            <span className="note">{user?.email}</span>
-            <h2 style={{ marginTop: 6 }}>
-              {forced ? 'Cambia la clave inicial' : 'Cambiar contraseña'}
-            </h2>
-          </div>
+        {forced && (
+          <Alert tone="warn">
+            Es tu primer acceso. Define una contraseña personal para continuar.
+          </Alert>
+        )}
+        {error && <Alert>{error}</Alert>}
 
-          {forced && (
-            <div className="alert alert-warn">
-              Es tu primer acceso. Define una contraseña personal para continuar.
-            </div>
-          )}
-          {error && <div className="alert">{error}</div>}
+        <Field
+          label="Contraseña actual"
+          type="password"
+          autoComplete="current-password"
+          required
+          autoFocus
+          value={current}
+          onChange={(e) => setCurrent(e.target.value)}
+        />
+        <Field
+          label="Contraseña nueva"
+          type="password"
+          autoComplete="new-password"
+          required
+          minLength={8}
+          value={next}
+          onChange={(e) => setNext(e.target.value)}
+        />
+        <Field
+          label="Repite la nueva"
+          type="password"
+          autoComplete="new-password"
+          required
+          value={repeat}
+          onChange={(e) => setRepeat(e.target.value)}
+        />
 
-          <Field
-            label="Contraseña actual"
-            type="password"
-            autoComplete="current-password"
-            required
-            autoFocus
-            value={current}
-            onChange={(e) => setCurrent(e.target.value)}
-          />
-          <Field
-            label="Contraseña nueva"
-            type="password"
-            autoComplete="new-password"
-            required
-            minLength={8}
-            value={next}
-            onChange={(e) => setNext(e.target.value)}
-          />
-          <Field
-            label="Repite la nueva"
-            type="password"
-            autoComplete="new-password"
-            required
-            value={repeat}
-            onChange={(e) => setRepeat(e.target.value)}
-          />
+        <Button type="submit" loading={busy} className="font-bold tracking-widest uppercase">
+          Guardar contraseña
+        </Button>
 
-          <Button type="submit" variant="primary" loading={busy}>
-            Guardar contraseña
-          </Button>
-
-          <p className="field-hint">
-            Al guardarla se cierran todas tus sesiones y tendrás que entrar de nuevo.
-          </p>
-        </form>
-      </main>
-    </div>
+        <p className="text-xs text-muted-foreground">
+          Al guardarla se cierran todas tus sesiones y tendrás que entrar de nuevo.
+        </p>
+      </form>
+    </AuthLayout>
   );
 }

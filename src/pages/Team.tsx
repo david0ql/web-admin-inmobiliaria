@@ -4,17 +4,29 @@ import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Avatar,
   Badge,
   Button,
   Card,
+  CheckField,
   ErrorNote,
   Field,
   Loading,
   Modal,
+  PageBody,
+  SELECT_CLASS,
   SelectField,
+  Table,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
 } from '../components/ui';
+import { Input } from '../components/ui/input';
 import { ROLE_LABEL, WEEKDAYS, relative } from '../lib/format';
+import { cn } from '../lib/utils';
 
 export function Team() {
   const { can, user } = useAuth();
@@ -34,52 +46,48 @@ export function Team() {
         title="Equipo"
         actions={
           <>
-            <label className="check">
-              <input
-                type="checkbox"
-                checked={includeInactive}
-                onChange={(e) => setIncludeInactive(e.target.checked)}
-              />
-              Ver inactivos
-            </label>
+            <CheckField
+              label="Ver inactivos"
+              checked={includeInactive}
+              onChange={(e) => setIncludeInactive(e.target.checked)}
+            />
             {can('ADMIN') && (
-              <Button variant="primary" onClick={() => setCreating(true)}>
-                Nuevo asesor
-              </Button>
+              <Button onClick={() => setCreating(true)}>Nuevo asesor</Button>
             )}
           </>
         }
       />
 
-      <div className="content stack">
+      <PageBody>
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && !data && <Loading rows={5} />}
 
         {data && (
           <Card flush>
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
+            <Table>
+                <THead>
                   <tr>
-                    <th>Asesor</th>
-                    <th>Perfil</th>
-                    <th className="hide-sm">Contacto</th>
-                    <th>Estado</th>
-                    <th className="num hide-sm">Último acceso</th>
-                    <th />
+                    <Th>Asesor</Th>
+                    <Th>Perfil</Th>
+                    <Th hideSm>Contacto</Th>
+                    <Th>Estado</Th>
+                    <Th num hideSm>
+                      Último acceso
+                    </Th>
+                    <Th />
                   </tr>
-                </thead>
-                <tbody>
+                </THead>
+                <TBody>
                   {data.map((agent) => (
-                    <tr key={agent.id}>
-                      <td>
-                        <span className="row" style={{ gap: 9 }}>
+                    <Tr key={agent.id}>
+                      <Td>
+                        <span className="flex items-center gap-2.5">
                           <Avatar
                             name={`${agent.firstName} ${agent.lastName ?? ''}`}
                             src={agent.photoUrl}
                           />
-                          <span>
-                            <strong>
+                          <span className="min-w-0">
+                            <strong className="font-medium">
                               {agent.firstName} {agent.lastName ?? ''}
                             </strong>
                             {agent.id === user?.id && (
@@ -88,19 +96,19 @@ export function Team() {
                                 <Badge tone="blue">tú</Badge>
                               </>
                             )}
-                            <div className="note" style={{ marginTop: 2 }}>
-                              {agent.email}
-                            </div>
+                            <div className="note mt-0.5">{agent.email}</div>
                           </span>
                         </span>
-                      </td>
-                      <td>
+                      </Td>
+                      <Td>
                         <Badge tone={agent.role === 'ADMIN' ? 'ink' : 'neutral'}>
                           {ROLE_LABEL[agent.role]}
                         </Badge>
-                      </td>
-                      <td className="hide-sm figure small">{agent.cellPhone ?? '—'}</td>
-                      <td>
+                      </Td>
+                      <Td hideSm className="tabular">
+                        {agent.cellPhone ?? '—'}
+                      </Td>
+                      <Td>
                         {agent.status === 'ACTIVE' ? (
                           agent.mustSetPassword ? (
                             <Badge tone="amber">clave sin cambiar</Badge>
@@ -110,23 +118,22 @@ export function Team() {
                         ) : (
                           <Badge tone="red">inactivo</Badge>
                         )}
-                      </td>
-                      <td className="num small muted hide-sm">
+                      </Td>
+                      <Td num hideSm className="text-muted-foreground">
                         {agent.lastLoginAt ? relative(agent.lastLoginAt) : 'nunca'}
-                      </td>
-                      <td style={{ width: 120 }}>
-                        <Button size="sm" onClick={() => setShiftsFor(agent)}>
+                      </Td>
+                      <Td className="w-[120px]">
+                        <Button variant="outline" size="sm" onClick={() => setShiftsFor(agent)}>
                           Turnos
                         </Button>
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TBody>
+            </Table>
           </Card>
         )}
-      </div>
+      </PageBody>
 
       {creating && (
         <NewAgentModal
@@ -181,9 +188,10 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
-            variant="primary"
             loading={busy}
             disabled={!form.firstName.trim() || !form.email.trim()}
             onClick={() => void save()}
@@ -193,14 +201,14 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
-        <div className="alert alert-warn">
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
+        <Alert tone="warn">
           Entrará con la clave genérica de la agencia y la aplicación le exigirá cambiarla antes
           de poder ver nada.
-        </div>
+        </Alert>
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="grid gap-4 sm:grid-cols-2">
           <Field
             label="Nombre"
             required
@@ -302,21 +310,25 @@ function ShiftsModal({
       footer={
         editable ? (
           <>
-            <Button onClick={onClose}>Cancelar</Button>
-            <Button variant="primary" loading={busy} onClick={() => void save()}>
+            <Button variant="outline" onClick={onClose}>
+              Cancelar
+            </Button>
+            <Button loading={busy} onClick={() => void save()}>
               Guardar cuadro
             </Button>
           </>
         ) : (
-          <Button onClick={onClose}>Cerrar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cerrar
+          </Button>
         )
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
         {loaded.loading && <Loading rows={3} />}
 
-        <p className="field-hint">
+        <p className="text-xs text-muted-foreground">
           Al agendar una cita fuera de estas franjas la aplicación avisa antes de crearla. Las
           guardias reciben los contactos que entran fuera de horario.
         </p>
@@ -326,10 +338,9 @@ function ShiftsModal({
         )}
 
         {shifts.map((shift, index) => (
-          <div key={index} className="row" style={{ gap: 8 }}>
+          <div key={index} className="flex flex-wrap items-center gap-2">
             <select
-              className="select"
-              style={{ flex: '0 0 130px' }}
+              className={cn(SELECT_CLASS, 'w-[130px]')}
               value={shift.weekday}
               onChange={(e) => update(index, { weekday: Number(e.target.value) })}
               disabled={!editable}
@@ -340,25 +351,22 @@ function ShiftsModal({
                 </option>
               ))}
             </select>
-            <input
-              className="input"
-              style={{ flex: '0 0 110px' }}
+            <Input
+              className="w-[110px]"
               type="time"
               value={shift.startTime}
               onChange={(e) => update(index, { startTime: e.target.value })}
               disabled={!editable}
             />
-            <input
-              className="input"
-              style={{ flex: '0 0 110px' }}
+            <Input
+              className="w-[110px]"
               type="time"
               value={shift.endTime}
               onChange={(e) => update(index, { endTime: e.target.value })}
               disabled={!editable}
             />
             <select
-              className="select"
-              style={{ flex: '0 0 130px' }}
+              className={cn(SELECT_CLASS, 'w-[130px]')}
               value={shift.kind}
               onChange={(e) => update(index, { kind: e.target.value as DraftShift['kind'] })}
               disabled={!editable}
@@ -369,7 +377,7 @@ function ShiftsModal({
             {editable && (
               <Button
                 size="sm"
-                variant="danger"
+                variant="destructive"
                 onClick={() => setDraft(shifts.filter((_, i) => i !== index))}
               >
                 Quitar
@@ -380,6 +388,8 @@ function ShiftsModal({
 
         {editable && (
           <Button
+            variant="outline"
+            className="self-start"
             onClick={() =>
               setDraft([
                 ...shifts,

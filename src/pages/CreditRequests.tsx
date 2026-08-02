@@ -12,6 +12,7 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Badge,
   Button,
   Card,
@@ -20,9 +21,16 @@ import {
   Field,
   Loading,
   Modal,
+  PageBody,
   Pager,
   SelectField,
+  Table,
+  TBody,
+  Td,
   TextareaField,
+  Th,
+  THead,
+  Tr,
 } from '../components/ui';
 import { date, money, number, relative } from '../lib/format';
 
@@ -123,112 +131,109 @@ export function CreditRequests() {
         }
       />
 
-      <div className="content stack">
-        <div className="filters">
-          <label className="field" style={{ flex: '1 1 260px' }}>
-            <span>Buscar</span>
-            <input
-              className="input"
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Nombre, correo, teléfono, documento o referencia"
-            />
-          </label>
-          <label className="field" style={{ flex: '0 1 200px' }}>
-            <span>Estado</span>
-            <select
-              className="select"
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">Todas</option>
-              {Object.entries(STATUS_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                  {counts.data?.[value] ? ` (${counts.data[value]})` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+      <PageBody>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+          <Field
+            label="Buscar"
+            className="col-span-2"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Nombre, correo, teléfono, documento o referencia"
+          />
+          <SelectField
+            label="Estado"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todas</option>
+            {Object.entries(STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+                {counts.data?.[value] ? ` (${counts.data[value]})` : ''}
+              </option>
+            ))}
+          </SelectField>
         </div>
 
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && !data && <Loading rows={6} />}
 
-        {data && (
+        {data && data.data.length === 0 && (
+          <Empty title="No hay consultas de crédito">
+            Aquí llegan las consultas de viabilidad que la gente envía desde la web. Al pasarlas
+            al embudo, el interesado queda dado de alta como cliente con el caso ya escrito en
+            su requerimiento.
+          </Empty>
+        )}
+
+        {data && data.data.length > 0 && (
           <Card flush>
-            {data.data.length === 0 ? (
-              <Empty title="No hay consultas de crédito">
-                Aquí llegan las consultas de viabilidad que la gente envía desde la web. Al pasarlas
-                al embudo, el interesado queda dado de alta como cliente con el caso ya escrito en
-                su requerimiento.
-              </Empty>
-            ) : (
-              <>
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead>
-                      <tr>
-                        <th>Referencia</th>
-                        <th>Solicitante</th>
-                        <th className="hide-sm">Producto</th>
-                        <th className="num">Monto</th>
-                        <th className="num hide-sm">Plazo</th>
-                        <th>Estado</th>
-                        <th className="num">Recibida</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.data.map((request) => (
-                        <tr key={request.id} className="clickable" onClick={() => setOpen(request)}>
-                          <td className="figure">{request.reference}</td>
-                          <td>
-                            <strong>
-                              {request.firstName} {request.lastName}
-                            </strong>
-                            <div className="note" style={{ marginTop: 2 }}>
-                              {request.phone}
-                              {request.coApplicant ? ' · con segundo solicitante' : ''}
-                            </div>
-                          </td>
-                          <td className="hide-sm">
-                            {PRODUCT_LABEL[request.product] ?? request.product}
-                            <div className="note" style={{ marginTop: 2 }}>
-                              {PORTFOLIO_LABEL[request.portfolioType]} ·{' '}
-                              {HOUSING_LABEL[request.housingType]}
-                            </div>
-                          </td>
-                          <td className="num">{money(request.amount)}</td>
-                          <td className="num hide-sm">{request.termYears} años</td>
-                          <td>
-                            <Badge tone={STATUS_TONE[request.status]}>
-                              {STATUS_LABEL[request.status]}
-                            </Badge>
-                          </td>
-                          <td className="num small muted">{relative(request.createdAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <Pager
-                  page={data.meta.page}
-                  pages={data.meta.pages}
-                  total={data.meta.total}
-                  unit="consultas"
-                  onPage={setPage}
-                />
-              </>
-            )}
+            <Table>
+              <THead>
+                <tr>
+                  <Th>Referencia</Th>
+                  <Th>Solicitante</Th>
+                  <Th hideSm>Producto</Th>
+                  <Th num>Monto</Th>
+                  <Th num hideSm>
+                    Plazo
+                  </Th>
+                  <Th>Estado</Th>
+                  <Th num>Recibida</Th>
+                </tr>
+              </THead>
+              <TBody>
+                {data.data.map((request) => (
+                  <Tr key={request.id} onClick={() => setOpen(request)}>
+                    <Td className="tabular">{request.reference}</Td>
+                    <Td>
+                      <strong className="font-medium">
+                        {request.firstName} {request.lastName}
+                      </strong>
+                      <div className="note mt-0.5">
+                        {request.phone}
+                        {request.coApplicant ? ' · con segundo solicitante' : ''}
+                      </div>
+                    </Td>
+                    <Td hideSm>
+                      {PRODUCT_LABEL[request.product] ?? request.product}
+                      <div className="note mt-0.5">
+                        {PORTFOLIO_LABEL[request.portfolioType]} ·{' '}
+                        {HOUSING_LABEL[request.housingType]}
+                      </div>
+                    </Td>
+                    <Td num>{money(request.amount)}</Td>
+                    <Td num hideSm>
+                      {request.termYears} años
+                    </Td>
+                    <Td>
+                      <Badge tone={STATUS_TONE[request.status]}>
+                        {STATUS_LABEL[request.status]}
+                      </Badge>
+                    </Td>
+                    <Td num className="text-muted-foreground">
+                      {relative(request.createdAt)}
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </Table>
+            <Pager
+              page={data.meta.page}
+              pages={data.meta.pages}
+              total={data.meta.total}
+              unit="consultas"
+              onPage={setPage}
+            />
           </Card>
         )}
-      </div>
+      </PageBody>
 
       {open && (
         <CreditDetail
@@ -303,20 +308,19 @@ function CreditDetail({
       footer={
         editable && (
           <>
-            <Button onClick={onClose}>Cerrar</Button>
+            <Button variant="outline" onClick={onClose}>
+              Cerrar
+            </Button>
             {request.clientId ? (
-              <Button
-                variant="primary"
-                onClick={() => navigate(`/clientes/${request.clientId}`)}
-              >
+              <Button onClick={() => navigate(`/clientes/${request.clientId}`)}>
                 Ver el cliente
               </Button>
             ) : (
               <>
-                <Button loading={busy} onClick={() => void review()}>
+                <Button variant="outline" loading={busy} onClick={() => void review()}>
                   Guardar estado
                 </Button>
-                <Button variant="primary" loading={busy} onClick={() => void convert()}>
+                <Button loading={busy} onClick={() => void convert()}>
                   Pasar al embudo
                 </Button>
               </>
@@ -325,10 +329,10 @@ function CreditDetail({
         )
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
-        <div className="row row-wrap" style={{ gap: 6 }}>
+        <div className="flex flex-wrap gap-1.5">
           <Badge tone={STATUS_TONE[request.status]}>{STATUS_LABEL[request.status]}</Badge>
           <Badge>{PRODUCT_LABEL[request.product] ?? request.product}</Badge>
           <Badge>{PORTFOLIO_LABEL[request.portfolioType]}</Badge>
@@ -337,14 +341,9 @@ function CreditDetail({
           {request.hasPropertyPicked && <Badge tone="blue">Ya eligió inmueble</Badge>}
         </div>
 
-        <div
-          className="grid"
-          style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}
-        >
-          <Card title="El crédito" flush>
-            <div className="table-wrap">
-              <table className="data">
-                <tbody>
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
+          <Card title="El crédito">
+            <dl className="grid">
                   <Row label="Monto solicitado" value={money(request.amount)} />
                   <Row label="Plazo" value={`${request.termYears} años`} />
                   <Row
@@ -358,37 +357,27 @@ function CreditDetail({
                   />
                   <Row label="Inmueble" value={request.propertyCode ?? 'Sin elegir'} />
                   <Row label="Entidad" value={request.institution ?? '—'} />
-                </tbody>
-              </table>
-            </div>
+            </dl>
           </Card>
 
-          <Card title="Solicitante" flush>
-            <div className="table-wrap">
-              <table className="data">
-                <tbody>
-                  <Person person={request} />
-                </tbody>
-              </table>
-            </div>
+          <Card title="Solicitante">
+            <dl className="grid">
+              <Person person={request} />
+            </dl>
           </Card>
         </div>
 
         {request.coApplicant && (
-          <Card title="Segundo solicitante" flush>
-            <div className="table-wrap">
-              <table className="data">
-                <tbody>
-                  <Person person={request.coApplicant} />
-                </tbody>
-              </table>
-            </div>
+          <Card title="Segundo solicitante">
+            <dl className="grid">
+              <Person person={request.coApplicant} />
+            </dl>
           </Card>
         )}
 
         {request.notes && (
           <Card title="Observaciones del solicitante">
-            <p style={{ fontSize: 'var(--t-small)', whiteSpace: 'pre-wrap' }}>{request.notes}</p>
+            <p className="text-sm whitespace-pre-wrap">{request.notes}</p>
           </Card>
         )}
 
@@ -397,7 +386,7 @@ function CreditDetail({
         </p>
 
         {editable && !request.clientId && (
-          <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+          <div className="grid gap-4 sm:grid-cols-2">
             <SelectField
               label="Estado"
               value={status}
@@ -415,7 +404,7 @@ function CreditDetail({
               onChange={(e) => setInstitution(e.target.value)}
               placeholder="Banco al que se radicó"
             />
-            <div style={{ gridColumn: '1 / -1' }}>
+            <div className="sm:col-span-2">
               <TextareaField
                 label="Notas de la gestión"
                 value={resolution}
@@ -469,13 +458,12 @@ function age(birthDate: string): number {
   return years;
 }
 
+/** Una fila de ficha: rotulo a la izquierda, dato a la derecha. */
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <tr>
-      <td className="note" style={{ width: '48%' }}>
-        {label}
-      </td>
-      <td>{value}</td>
-    </tr>
+    <div className="flex items-baseline justify-between gap-4 border-b py-2.5 text-sm last:border-b-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="tabular text-right font-medium">{value}</dd>
+    </div>
   );
 }

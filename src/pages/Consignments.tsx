@@ -13,16 +13,25 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Badge,
   Button,
   Card,
   Empty,
   ErrorNote,
+  Field,
   Loading,
   Modal,
+  PageBody,
   Pager,
   SelectField,
+  Table,
+  TBody,
+  Td,
   TextareaField,
+  Th,
+  THead,
+  Tr,
 } from '../components/ui';
 import { area, date, money, number, relative } from '../lib/format';
 
@@ -113,109 +122,103 @@ export function Consignments() {
         }
       />
 
-      <div className="content stack">
-        <div className="filters">
-          <label className="field" style={{ flex: '1 1 260px' }}>
-            <span>Buscar</span>
-            <input
-              className="input"
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-              placeholder="Propietario, dirección, conjunto o referencia"
-            />
-          </label>
-          <label className="field" style={{ flex: '0 1 200px' }}>
-            <span>Estado</span>
-            <select
-              className="select"
-              value={status}
-              onChange={(e) => {
-                setStatus(e.target.value);
-                setPage(1);
-              }}
-            >
-              <option value="">Todas</option>
-              {Object.entries(STATUS_LABEL).map(([value, label]) => (
-                <option key={value} value={value}>
-                  {label}
-                  {counts.data?.[value] ? ` (${counts.data[value]})` : ''}
-                </option>
-              ))}
-            </select>
-          </label>
+      <PageBody>
+        <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
+          <Field
+            label="Buscar"
+            className="col-span-2"
+            value={q}
+            onChange={(e) => {
+              setQ(e.target.value);
+              setPage(1);
+            }}
+            placeholder="Propietario, dirección, conjunto o referencia"
+          />
+          <SelectField
+            label="Estado"
+            value={status}
+            onChange={(e) => {
+              setStatus(e.target.value);
+              setPage(1);
+            }}
+          >
+            <option value="">Todas</option>
+            {Object.entries(STATUS_LABEL).map(([value, label]) => (
+              <option key={value} value={value}>
+                {label}
+                {counts.data?.[value] ? ` (${counts.data[value]})` : ''}
+              </option>
+            ))}
+          </SelectField>
         </div>
 
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && !data && <Loading rows={6} />}
 
-        {data && (
+        {data && data.data.length === 0 && (
+          <Empty title="No hay solicitudes">
+            Aquí llegan los inmuebles que los propietarios proponen desde la web. Al aceptar
+            una, se convierte en inmueble del inventario con sus fotos, y el propietario queda
+            dado de alta como cliente.
+          </Empty>
+        )}
+
+        {data && data.data.length > 0 && (
           <Card flush>
-            {data.data.length === 0 ? (
-              <Empty title="No hay solicitudes">
-                Aquí llegan los inmuebles que los propietarios proponen desde la web. Al aceptar
-                una, se convierte en inmueble del inventario con sus fotos, y el propietario queda
-                dado de alta como cliente.
-              </Empty>
-            ) : (
-              <>
-                <div className="table-wrap">
-                  <table className="data">
-                    <thead>
-                      <tr>
-                        <th>Referencia</th>
-                        <th>Inmueble</th>
-                        <th className="hide-sm">Propietario</th>
-                        <th className="num">Precio</th>
-                        <th className="num hide-sm">Área</th>
-                        <th>Estado</th>
-                        <th className="num">Recibida</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {data.data.map((request) => (
-                        <tr key={request.id} className="clickable" onClick={() => setOpen(request)}>
-                          <td className="figure">{request.reference}</td>
-                          <td>
-                            <strong>{request.complexName}</strong>
-                            <div className="note" style={{ marginTop: 2 }}>
-                              {request.propertyTypeName} · {request.neighborhood},{' '}
-                              {request.cityName}
-                            </div>
-                          </td>
-                          <td className="hide-sm">
-                            {request.ownerFirstName} {request.ownerLastName}
-                            <div className="note" style={{ marginTop: 2 }}>
-                              {request.ownerPhone}
-                            </div>
-                          </td>
-                          <td className="num">{money(request.salePrice)}</td>
-                          <td className="num hide-sm">{area(Number(request.builtArea))}</td>
-                          <td>
-                            <Badge tone={STATUS_TONE[request.status]}>
-                              {STATUS_LABEL[request.status]}
-                            </Badge>
-                          </td>
-                          <td className="num small muted">{relative(request.createdAt)}</td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-                <Pager
-                  page={data.meta.page}
-                  pages={data.meta.pages}
-                  total={data.meta.total}
-                  unit="solicitudes"
-                  onPage={setPage}
-                />
-              </>
-            )}
+            <Table>
+              <THead>
+                <tr>
+                  <Th>Referencia</Th>
+                  <Th>Inmueble</Th>
+                  <Th hideSm>Propietario</Th>
+                  <Th num>Precio</Th>
+                  <Th num hideSm>
+                    Área
+                  </Th>
+                  <Th>Estado</Th>
+                  <Th num>Recibida</Th>
+                </tr>
+              </THead>
+              <TBody>
+                {data.data.map((request) => (
+                  <Tr key={request.id} onClick={() => setOpen(request)}>
+                    <Td className="tabular">{request.reference}</Td>
+                    <Td>
+                      <strong className="font-medium">{request.complexName}</strong>
+                      <div className="note mt-0.5">
+                        {request.propertyTypeName} · {request.neighborhood}, {request.cityName}
+                      </div>
+                    </Td>
+                    <Td hideSm>
+                      {request.ownerFirstName} {request.ownerLastName}
+                      <div className="note mt-0.5">{request.ownerPhone}</div>
+                    </Td>
+                    <Td num>{money(request.salePrice)}</Td>
+                    <Td num hideSm>
+                      {area(Number(request.builtArea))}
+                    </Td>
+                    <Td>
+                      <Badge tone={STATUS_TONE[request.status]}>
+                        {STATUS_LABEL[request.status]}
+                      </Badge>
+                    </Td>
+                    <Td num className="text-muted-foreground">
+                      {relative(request.createdAt)}
+                    </Td>
+                  </Tr>
+                ))}
+              </TBody>
+            </Table>
+            <Pager
+              page={data.meta.page}
+              pages={data.meta.pages}
+              total={data.meta.total}
+              unit="solicitudes"
+              onPage={setPage}
+            />
           </Card>
         )}
-      </div>
+      </PageBody>
 
       {open && (
         <ConsignmentDetail
@@ -291,21 +294,19 @@ function ConsignmentDetail({
       footer={
         editable && (
           <>
-            <Button onClick={onClose}>Cerrar</Button>
+            <Button variant="outline" onClick={onClose}>
+              Cerrar
+            </Button>
             {request.propertyId ? (
-              <Button
-                variant="primary"
-                onClick={() => navigate(`/inmuebles/${request.propertyId}`)}
-              >
+              <Button onClick={() => navigate(`/inmuebles/${request.propertyId}`)}>
                 Ver el inmueble
               </Button>
             ) : (
               <>
-                <Button loading={busy} onClick={() => void review()}>
+                <Button variant="outline" loading={busy} onClick={() => void review()}>
                   Guardar estado
                 </Button>
                 <Button
-                  variant="primary"
                   loading={busy}
                   disabled={!convertible}
                   onClick={() => void accept()}
@@ -318,17 +319,17 @@ function ConsignmentDetail({
         )
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
         {!request.propertyId && !convertible && (
-          <div className="alert alert-warn">
+          <Alert tone="warn">
             El propietario escribió la ciudad y el tipo a mano y no coinciden con el catálogo. Hay
             que resolverlos antes de poder convertir la solicitud en inmueble.
-          </div>
+          </Alert>
         )}
 
-        <div className="row row-wrap" style={{ gap: 6 }}>
+        <div className="flex flex-wrap gap-1.5">
           <Badge tone={STATUS_TONE[request.status]}>{STATUS_LABEL[request.status]}</Badge>
           <Badge>{request.propertyTypeName}</Badge>
           <Badge>{CONDITION_LABEL[request.condition] ?? request.condition}</Badge>
@@ -337,11 +338,9 @@ function ConsignmentDetail({
           {request.hasStorageRoom && <Badge tone="blue">con depósito</Badge>}
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))' }}>
-          <Card title="Inmueble" flush>
-            <div className="table-wrap">
-              <table className="data">
-                <tbody>
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(240px,1fr))]">
+          <Card title="Inmueble">
+            <dl className="grid">
                   <Row label="Conjunto" value={request.complexName} />
                   <Row label="Dirección" value={`${request.address} — ${request.unitNumber}`} />
                   <Row
@@ -366,15 +365,11 @@ function ConsignmentDetail({
                   <Row label="Baños" value={String(request.bathrooms)} />
                   <Row label="Parqueaderos" value={String(request.parkingSpaces)} />
                   <Row label="Año" value={String(request.buildingYear)} />
-                </tbody>
-              </table>
-            </div>
+            </dl>
           </Card>
 
-          <Card title="Dinero y propietario" flush>
-            <div className="table-wrap">
-              <table className="data">
-                <tbody>
+          <Card title="Dinero y propietario">
+            <dl className="grid">
                   <Row label="Precio de venta" value={money(request.salePrice)} />
                   <Row label="Administración" value={money(request.maintenanceFee)} />
                   <Row
@@ -404,24 +399,30 @@ function ConsignmentDetail({
                     label="Visita pedida"
                     value={request.requestedVisitAt ? date(request.requestedVisitAt) : '—'}
                   />
-                </tbody>
-              </table>
-            </div>
+            </dl>
           </Card>
         </div>
 
         {request.notes && (
           <Card title="Observaciones del propietario">
-            <p style={{ fontSize: 'var(--t-small)', whiteSpace: 'pre-wrap' }}>{request.notes}</p>
+            <p className="text-sm whitespace-pre-wrap">{request.notes}</p>
           </Card>
         )}
 
         {photos.length > 0 && (
           <Card title={`Fotos · ${photos.length}`}>
-            <div className="gallery">
+            <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
               {photos.map((photo) => (
-                <figure key={photo.storageKey}>
-                  <img src={photo.url} alt={photo.originalName} loading="lazy" />
+                <figure
+                  key={photo.storageKey}
+                  className="relative m-0 aspect-[4/3] overflow-hidden rounded-md border"
+                >
+                  <img
+                    src={photo.url}
+                    alt={photo.originalName}
+                    loading="lazy"
+                    className="size-full object-cover"
+                  />
                 </figure>
               ))}
             </div>
@@ -431,27 +432,27 @@ function ConsignmentDetail({
         {/* Los cinco documentos son una lista de comprobación, no un adjunto
             suelto: interesa tanto lo que llegó como lo que falta. */}
         <Card title={`Documentos · ${documents.length} de ${DOCUMENTS.length}`} flush>
-          <div className="table-wrap">
-            <table className="data">
-              <tbody>
+          <Table>
+              <TBody>
                 {DOCUMENTS.map(({ type, label }) => {
                   const file = documents.find((doc) => doc.docType === type);
                   // La posición es la que la API espera en la ruta: se pide por
                   // índice y no por clave, para que la URL no valga sola.
                   const index = file ? documents.indexOf(file) : -1;
                   return (
-                    <tr key={type}>
-                      <td>
+                    <Tr key={type}>
+                      <Td>
                         {label}
                         {file && (
-                          <div className="note" style={{ marginTop: 2 }}>
+                          <div className="note mt-0.5">
                             {file.originalName} · {Math.round(file.bytes / 1024)} KB
                           </div>
                         )}
-                      </td>
-                      <td style={{ width: 130 }}>
+                      </Td>
+                      <Td className="w-[130px]">
                         {file ? (
                           <Button
+                            variant="outline"
                             size="sm"
                             onClick={() =>
                               void download(
@@ -465,8 +466,8 @@ function ConsignmentDetail({
                         ) : (
                           <Badge tone="amber">Falta</Badge>
                         )}
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   );
                 })}
 
@@ -474,15 +475,16 @@ function ConsignmentDetail({
                 {documents
                   .filter((doc) => !doc.docType)
                   .map((document) => (
-                    <tr key={document.storageKey}>
-                      <td>
+                    <Tr key={document.storageKey}>
+                      <Td>
                         Sin clasificar
-                        <div className="note" style={{ marginTop: 2 }}>
+                        <div className="note mt-0.5">
                           {document.originalName} · {Math.round(document.bytes / 1024)} KB
                         </div>
-                      </td>
-                      <td style={{ width: 130 }}>
+                      </Td>
+                      <Td className="w-[130px]">
                         <Button
+                          variant="outline"
                           size="sm"
                           onClick={() =>
                             void download(
@@ -493,16 +495,15 @@ function ConsignmentDetail({
                         >
                           Descargar
                         </Button>
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   ))}
-              </tbody>
-            </table>
-          </div>
+              </TBody>
+          </Table>
         </Card>
 
         {editable && !request.propertyId && (
-          <div className="grid" style={{ gridTemplateColumns: '1fr 2fr' }}>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_minmax(0,2fr)]">
             <SelectField
               label="Estado"
               value={status}
@@ -529,13 +530,12 @@ function ConsignmentDetail({
   );
 }
 
+/** Una fila de ficha: rotulo a la izquierda, dato a la derecha. */
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <tr>
-      <td className="note" style={{ width: '48%' }}>
-        {label}
-      </td>
-      <td>{value}</td>
-    </tr>
+    <div className="flex items-baseline justify-between gap-4 border-b py-2.5 text-sm last:border-b-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="tabular text-right font-medium">{value}</dd>
+    </div>
   );
 }

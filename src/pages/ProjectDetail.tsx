@@ -11,15 +11,24 @@ import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import {
+  Alert,
   Badge,
   Button,
   Card,
+  CardShell,
   Empty,
   ErrorNote,
   Field,
   Loading,
   Modal,
+  PageBody,
   Stat,
+  Table,
+  TBody,
+  Td,
+  Th,
+  THead,
+  Tr,
 } from '../components/ui';
 import { AVAILABILITY_LABEL, area, money, moneyShort, number } from '../lib/format';
 import { FAMILY_KIND_LABEL, FAMILY_STATUS_LABEL, ProjectForm } from './Projects';
@@ -55,9 +64,9 @@ export function ProjectDetail() {
   if (loading) return <Loading rows={8} />;
   if (error || !data) {
     return (
-      <div className="content">
+      <PageBody>
         <ErrorNote onRetry={reload}>{error ?? 'Proyecto no encontrado'}</ErrorNote>
-      </div>
+      </PageBody>
     );
   }
 
@@ -83,24 +92,26 @@ export function ProjectDetail() {
         title={family.name}
         actions={
           <>
-            <Button onClick={() => navigate('/proyectos')}>Volver</Button>
+            <Button variant="outline" onClick={() => navigate('/proyectos')}>
+              Volver
+            </Button>
             {editable && (
               <>
-                <Button variant="danger" onClick={() => void remove()}>
+                <Button variant="destructive" onClick={() => void remove()}>
                   Borrar
                 </Button>
-                <Button onClick={() => setEditing(true)}>Editar</Button>
-                <Button variant="primary" onClick={() => setAssigning(true)}>
-                  Asignar inmuebles
+                <Button variant="outline" onClick={() => setEditing(true)}>
+                  Editar
                 </Button>
+                <Button onClick={() => setAssigning(true)}>Asignar inmuebles</Button>
               </>
             )}
           </>
         }
       />
 
-      <div className="content stack">
-        <div className="grid" style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}>
+      <PageBody>
+        <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(200px,1fr))]">
           <Stat
             label="Unidades nuestras"
             value={number(properties.length)}
@@ -124,11 +135,9 @@ export function ProjectDetail() {
           />
         </div>
 
-        <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.6fr)' }}>
-          <Card title="Ficha" flush>
-            <div className="table-wrap">
-              <table className="data">
-                <tbody>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+          <Card title="Ficha">
+            <dl className="grid">
                   <Row label="Dirección web" value={`/${family.slug}`} />
                   <Row label="Tipo" value={FAMILY_KIND_LABEL[family.kind]} />
                   <Row label="Constructora" value={family.developer ?? '—'} />
@@ -141,15 +150,9 @@ export function ProjectDetail() {
                     label="En la web"
                     value={family.published ? 'Visible' : 'Oculto'}
                   />
-                </tbody>
-              </table>
-            </div>
+            </dl>
             {family.description && (
-              <div className="card-body">
-                <p style={{ fontSize: 'var(--t-small)', whiteSpace: 'pre-wrap' }}>
-                  {family.description}
-                </p>
-              </div>
+              <p className="mt-4 text-sm whitespace-pre-wrap">{family.description}</p>
             )}
           </Card>
 
@@ -161,101 +164,112 @@ export function ProjectDetail() {
             flush
           >
             {unitTypes.length === 0 ? (
-              <Empty title="Sin unidades asignadas">
-                Asigna inmuebles al proyecto y aquí aparecerán agrupados por forma, con su rango
-                de área y precio.
-              </Empty>
+              <div className="p-5">
+                <Empty title="Sin unidades asignadas">
+                  Asigna inmuebles al proyecto y aquí aparecerán agrupados por forma, con su
+                  rango de área y precio.
+                </Empty>
+              </div>
             ) : (
-              <div className="table-wrap">
-                <table className="data">
-                  <thead>
+              <Table>
+                  <THead>
                     <tr>
-                      <th>Tipología</th>
-                      <th>Tipo</th>
-                      <th className="num">Alcobas</th>
-                      <th className="num">Área</th>
-                      <th className="num">Desde</th>
-                      <th className="num">Disponibles</th>
+                      <Th>Tipología</Th>
+                      <Th>Tipo</Th>
+                      <Th num>Alcobas</Th>
+                      <Th num>Área</Th>
+                      <Th num>Desde</Th>
+                      <Th num>Disponibles</Th>
                     </tr>
-                  </thead>
-                  <tbody>
+                  </THead>
+                  <TBody>
                     {unitTypes.map((unit, index) => (
-                      <tr key={`${unit.unitType}-${unit.propertyType}-${index}`}>
-                        <td>
-                          <strong>{unit.unitType ?? 'Sin clasificar'}</strong>
-                        </td>
-                        <td>{unit.propertyType}</td>
-                        <td className="num">{unit.bedrooms ?? '—'}</td>
-                        <td className="num">
+                      <Tr key={`${unit.unitType}-${unit.propertyType}-${index}`}>
+                        <Td>
+                          <strong className="font-medium">
+                            {unit.unitType ?? 'Sin clasificar'}
+                          </strong>
+                        </Td>
+                        <Td>{unit.propertyType}</Td>
+                        <Td num>{unit.bedrooms ?? '—'}</Td>
+                        <Td num>
                           {unit.minArea === unit.maxArea
                             ? area(unit.minArea)
                             : `${number(unit.minArea)}–${area(unit.maxArea)}`}
-                        </td>
-                        <td className="num">{moneyShort(unit.minPrice)}</td>
-                        <td className="num">
+                        </Td>
+                        <Td num>{moneyShort(unit.minPrice)}</Td>
+                        <Td num>
                           {unit.available === 0 ? (
                             <Badge tone="neutral">agotada</Badge>
                           ) : (
                             `${unit.available}/${unit.units}`
                           )}
-                        </td>
-                      </tr>
+                        </Td>
+                      </Tr>
                     ))}
-                  </tbody>
-                </table>
-              </div>
+                  </TBody>
+              </Table>
             )}
           </Card>
         </div>
 
         <Card title={`Unidades · ${properties.length}`} flush>
           {properties.length === 0 ? (
-            <Empty
-              title="Ningún inmueble asignado"
-              action={
-                editable && (
-                  <Button variant="primary" onClick={() => setAssigning(true)}>
-                    Asignar inmuebles
-                  </Button>
-                )
-              }
-            >
-              Busca los inmuebles que pertenecen a este conjunto y asígnalos.
-            </Empty>
+            <div className="p-5">
+              <Empty
+                title="Ningún inmueble asignado"
+                action={
+                  editable && (
+                    <Button onClick={() => setAssigning(true)}>Asignar inmuebles</Button>
+                  )
+                }
+              >
+                Busca los inmuebles que pertenecen a este conjunto y asígnalos.
+              </Empty>
+            </div>
           ) : (
-            <div className="table-wrap">
-              <table className="data">
-                <thead>
+            <Table>
+                <THead>
                   <tr>
-                    <th>Código</th>
-                    <th>Inmueble</th>
-                    <th>Tipología</th>
-                    <th className="num">Área</th>
-                    <th className="num hide-sm">Alcobas</th>
-                    <th className="num">Precio</th>
-                    <th>Estado</th>
-                    <th />
+                    <Th>Código</Th>
+                    <Th>Inmueble</Th>
+                    <Th>Tipología</Th>
+                    <Th num>Área</Th>
+                    <Th num hideSm>
+                      Alcobas
+                    </Th>
+                    <Th num>Precio</Th>
+                    <Th>Estado</Th>
+                    <Th />
                   </tr>
-                </thead>
-                <tbody>
+                </THead>
+                <TBody>
                   {properties.map((property) => (
-                    <tr key={property.id}>
-                      <td className="figure">
-                        <Link to={`/inmuebles/${property.id}`}>{property.code}</Link>
-                      </td>
-                      <td style={{ maxWidth: 300 }}>{property.title}</td>
-                      <td>{property.unitType ?? <span className="note">sin clasificar</span>}</td>
-                      <td className="num">{area(property.area)}</td>
-                      <td className="num hide-sm">{property.bedrooms ?? '—'}</td>
-                      <td className="num">{money(property.salePrice)}</td>
-                      <td>
+                    <Tr key={property.id}>
+                      <Td className="tabular">
+                        <Link
+                          to={`/inmuebles/${property.id}`}
+                          className="hover:underline"
+                        >
+                          {property.code}
+                        </Link>
+                      </Td>
+                      <Td className="max-w-[300px]">{property.title}</Td>
+                      <Td>{property.unitType ?? <span className="note">sin clasificar</span>}</Td>
+                      <Td num>{area(property.area)}</Td>
+                      <Td num hideSm>
+                        {property.bedrooms ?? '—'}
+                      </Td>
+                      <Td num>{money(property.salePrice)}</Td>
+                      <Td>
                         <Badge tone={AVAILABILITY_TONE[property.availability]}>
                           {AVAILABILITY_LABEL[property.availability]}
                         </Badge>
-                      </td>
-                      <td style={{ width: 90 }}>
+                      </Td>
+                      <Td className="w-[90px]">
                         {editable && (
                           <Button
+                            variant="outline"
                             size="sm"
                             onClick={() => {
                               void api
@@ -266,15 +280,14 @@ export function ProjectDetail() {
                             Quitar
                           </Button>
                         )}
-                      </td>
-                    </tr>
+                      </Td>
+                    </Tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TBody>
+            </Table>
           )}
         </Card>
-      </div>
+      </PageBody>
 
       {editing && (
         <ProjectForm
@@ -302,14 +315,13 @@ export function ProjectDetail() {
   );
 }
 
+/** Una fila de la ficha: rotulo a la izquierda, dato a la derecha. */
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <tr>
-      <td className="note" style={{ width: '45%' }}>
-        {label}
-      </td>
-      <td>{value}</td>
-    </tr>
+    <div className="flex items-baseline justify-between gap-4 border-b py-2.5 text-sm last:border-b-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className="tabular text-right font-medium">{value}</dd>
+    </div>
   );
 }
 
@@ -379,9 +391,10 @@ function AssignUnitsModal({
       wide
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
-            variant="primary"
             loading={busy}
             disabled={selected.size === 0}
             onClick={() => void save()}
@@ -391,10 +404,10 @@ function AssignUnitsModal({
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
-        <div className="grid" style={{ gridTemplateColumns: '1.6fr 1fr' }}>
+        <div className="grid gap-4 sm:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
           <Field
             label="Buscar inmueble"
             autoFocus
@@ -411,41 +424,38 @@ function AssignUnitsModal({
           />
         </div>
 
-        <div className="card" style={{ maxHeight: 360, overflowY: 'auto' }}>
-          <table className="data">
-            <tbody>
+        <CardShell className="max-h-90 overflow-y-auto">
+          <Table>
+            <TBody>
               {(results.data?.data ?? []).map((property) => (
-                <tr key={property.id} className="clickable" onClick={() => toggle(property.id)}>
-                  <td style={{ width: 34 }}>
+                <Tr key={property.id} onClick={() => toggle(property.id)}>
+                  <Td className="w-[34px]">
                     <input
                       type="checkbox"
+                      className="size-4 accent-primary"
                       checked={selected.has(property.id)}
                       onChange={() => toggle(property.id)}
                       onClick={(e) => e.stopPropagation()}
                     />
-                  </td>
-                  <td className="figure" style={{ width: 92 }}>
-                    {property.code}
-                  </td>
-                  <td>
+                  </Td>
+                  <Td className="tabular w-[92px]">{property.code}</Td>
+                  <Td>
                     {property.title.slice(0, 52)}
-                    <div className="note" style={{ marginTop: 2 }}>
+                    <div className="note mt-0.5">
                       {property.zone?.name ?? property.city.name}
                       {property.family ? ` · ya en ${property.family.name}` : ''}
                     </div>
-                  </td>
-                  <td className="num">{area(property.area)}</td>
-                  <td className="num">{moneyShort(property.salePrice)}</td>
-                </tr>
+                  </Td>
+                  <Td num>{area(property.area)}</Td>
+                  <Td num>{moneyShort(property.salePrice)}</Td>
+                </Tr>
               ))}
-            </tbody>
-          </table>
+            </TBody>
+          </Table>
           {(results.data?.data ?? []).length === 0 && (
-            <p className="note" style={{ padding: 16 }}>
-              Ningún inmueble coincide.
-            </p>
+            <p className="note p-4">Ningún inmueble coincide.</p>
           )}
-        </div>
+        </CardShell>
       </div>
     </Modal>
   );

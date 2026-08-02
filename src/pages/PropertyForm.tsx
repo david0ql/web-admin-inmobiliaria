@@ -15,9 +15,11 @@ import {
   Badge,
   Button,
   Card,
+  CheckField,
   ErrorNote,
   Field,
   Loading,
+  PageBody,
   SelectField,
   TextareaField,
 } from '../components/ui';
@@ -261,21 +263,21 @@ export function PropertyForm() {
         title={editing ? 'Editar inmueble' : 'Nuevo inmueble'}
         actions={
           <>
-            <Button type="button" onClick={() => navigate(-1)}>
+            <Button type="button" variant="outline" onClick={() => navigate(-1)}>
               Cancelar
             </Button>
-            <Button type="submit" variant="primary" loading={busy}>
+            <Button type="submit" loading={busy}>
               {editing ? 'Guardar cambios' : 'Crear inmueble'}
             </Button>
           </>
         }
       />
 
-      <div className="content stack">
+      <PageBody>
         {error && <ErrorNote>{error}</ErrorNote>}
 
         <Card title="Identificación">
-          <div className="stack">
+          <div className="flex flex-col gap-4">
             <Field
               label="Título"
               required
@@ -284,10 +286,7 @@ export function PropertyForm() {
               onChange={(e) => set('title', e.target.value)}
               placeholder="APARTAMENTO EN VENTA EN CAÑAVERAL FLORIDABLANCA"
             />
-            <div
-              className="grid"
-              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))' }}
-            >
+            <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               <SelectField
                 label="Tipo"
                 required
@@ -342,30 +341,21 @@ export function PropertyForm() {
         </Card>
 
         <Card title="Negocio y precio">
-          <div className="stack">
-            <div className="row row-wrap" style={{ gap: 18 }}>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={form.forSale}
-                  onChange={(e) => set('forSale', e.target.checked)}
-                />
-                En venta
-              </label>
-              <label className="check">
-                <input
-                  type="checkbox"
-                  checked={form.forRent}
-                  onChange={(e) => set('forRent', e.target.checked)}
-                />
-                En arriendo
-              </label>
+          <div className="flex flex-col gap-4">
+            <div className="flex flex-wrap gap-5">
+              <CheckField
+                label="En venta"
+                checked={form.forSale}
+                onChange={(e) => set('forSale', e.target.checked)}
+              />
+              <CheckField
+                label="En arriendo"
+                checked={form.forRent}
+                onChange={(e) => set('forRent', e.target.checked)}
+              />
             </div>
 
-            <div
-              className="grid"
-              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))' }}
-            >
+            <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               {form.forSale && (
                 <Field
                   label="Precio de venta"
@@ -403,10 +393,7 @@ export function PropertyForm() {
         </Card>
 
         <Card title="Características físicas">
-          <div
-            className="grid"
-            style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))' }}
-          >
+          <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
             <Field
               label="Área total (m²)"
               type="number"
@@ -494,11 +481,8 @@ export function PropertyForm() {
         </Card>
 
         <Card title="Publicación">
-          <div className="stack">
-            <div
-              className="grid"
-              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))' }}
-            >
+          <div className="flex flex-col gap-4">
+            <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               <SelectField
                 label="Disponibilidad"
                 value={form.availability}
@@ -535,10 +519,7 @@ export function PropertyForm() {
               </SelectField>
             </div>
 
-            <div
-              className="grid"
-              style={{ gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))' }}
-            >
+            <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               <Field
                 label="Vídeo"
                 type="url"
@@ -588,7 +569,7 @@ export function PropertyForm() {
             </span>
           }
         >
-          <div className="grid" style={{ gridTemplateColumns: '1.4fr 1fr' }}>
+          <div className="grid gap-4 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
             <SelectField
               label="Conjunto o proyecto"
               value={form.familyId}
@@ -619,10 +600,10 @@ export function PropertyForm() {
         </Card>
 
         <Card title={`Características · ${form.featureIds.length} seleccionadas`}>
-          <div className="stack">
+          <div className="flex flex-col gap-4">
             <div>
-              <span className="note">Del inmueble</span>
-              <div className="row row-wrap" style={{ gap: 6, marginTop: 8 }}>
+              <span className="micro-label text-muted-foreground">Del inmueble</span>
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {internal.map((feature) => (
                   <FeatureChip
                     key={feature.id}
@@ -634,8 +615,10 @@ export function PropertyForm() {
               </div>
             </div>
             <div>
-              <span className="note">Del entorno y la copropiedad</span>
-              <div className="row row-wrap" style={{ gap: 6, marginTop: 8 }}>
+              <span className="micro-label text-muted-foreground">
+                Del entorno y la copropiedad
+              </span>
+              <div className="mt-2 flex flex-wrap gap-1.5">
                 {external.map((feature) => (
                   <FeatureChip
                     key={feature.id}
@@ -648,7 +631,7 @@ export function PropertyForm() {
             </div>
           </div>
         </Card>
-      </div>
+      </PageBody>
     </form>
   );
 }
@@ -663,13 +646,8 @@ function FeatureChip({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-pressed={active}
-      style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer' }}
-    >
-      <Badge tone={active ? 'green' : 'neutral'}>{name}</Badge>
+    <button type="button" onClick={onClick} aria-pressed={active} className="cursor-pointer">
+      <Badge tone={active ? 'ink' : 'neutral'}>{name}</Badge>
     </button>
   );
 }

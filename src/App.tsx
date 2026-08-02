@@ -1,3 +1,4 @@
+import { Loader2 } from 'lucide-react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
 import { Shell } from './components/Shell';
@@ -31,8 +32,8 @@ function Protected() {
 
   if (loading) {
     return (
-      <div style={{ display: 'grid', placeItems: 'center', minHeight: '100vh' }}>
-        <span className="spinner" aria-label="Cargando" />
+      <div className="grid min-h-screen place-items-center">
+        <Loader2 className="size-6 animate-spin text-muted-foreground" aria-label="Cargando" />
       </div>
     );
   }

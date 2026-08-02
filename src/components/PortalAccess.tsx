@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ApiError, api } from '../lib/api';
 import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
-import { Badge, Button, Card, Field } from './ui';
+import { Alert, Badge, Button, Card, Field } from './ui';
 import { relative } from '../lib/format';
 
 export interface PortalAccessState {
@@ -64,8 +64,8 @@ export function PortalAccess({ clientId }: { clientId: string }) {
 
   return (
     <Card title="Acceso al portal">
-      <div className="stack">
-        <div className="row row-wrap" style={{ gap: 6 }}>
+      <div className="flex flex-col gap-4">
+        <div className="flex flex-wrap gap-1.5">
           {data.portalEnabled && data.hasPassword ? (
             <Badge tone="green">Puede entrar</Badge>
           ) : (
@@ -84,24 +84,25 @@ export function PortalAccess({ clientId }: { clientId: string }) {
             : 'Sin correo en la ficha: no puede entrar hasta que se le ponga uno.'}
         </p>
 
-        {error && <div className="alert">{error}</div>}
-        {done && <div className="alert alert-ok">{done}</div>}
+        {error && <Alert>{error}</Alert>}
+        {done && <Alert tone="ok">{done}</Alert>}
 
         {editable && data.email && (
           <>
-            <div className="row" style={{ gap: 8, alignItems: 'flex-end' }}>
-              <div style={{ flex: 1 }}>
-                <Field
-                  label={data.hasPassword ? 'Nueva contraseña' : 'Contraseña inicial'}
-                  type="text"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={`Mínimo ${MIN_PASSWORD} caracteres`}
-                  hint="Se la dictas al cliente. Él tendrá que cambiarla al entrar."
-                  autoComplete="off"
-                />
-              </div>
+            <div className="flex items-start gap-2">
+              <Field
+                className="flex-1"
+                label={data.hasPassword ? 'Nueva contraseña' : 'Contraseña inicial'}
+                type="text"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder={`Mínimo ${MIN_PASSWORD} caracteres`}
+                hint="Se la dictas al cliente. Él tendrá que cambiarla al entrar."
+                autoComplete="off"
+              />
               <Button
+                className="mt-[22px]"
+                variant="outline"
                 loading={busy}
                 disabled={password.length < MIN_PASSWORD}
                 onClick={() =>
@@ -114,7 +115,7 @@ export function PortalAccess({ clientId }: { clientId: string }) {
 
             {data.hasPassword && (
               <Button
-                variant={data.portalEnabled ? 'danger' : 'default'}
+                variant={data.portalEnabled ? 'destructive' : 'outline'}
                 size="sm"
                 loading={busy}
                 onClick={() =>

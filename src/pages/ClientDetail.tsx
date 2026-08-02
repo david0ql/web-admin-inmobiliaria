@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { MessageCircle } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ApiError,
@@ -14,17 +15,26 @@ import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
 import { PortalAccess } from '../components/PortalAccess';
 import {
+  Alert,
   Avatar,
   Badge,
   Button,
   Card,
+  CardShell,
   Empty,
   ErrorNote,
   Field,
   Loading,
   Modal,
+  PageBody,
   SelectField,
+  Table,
+  TBody,
+  Td,
   TextareaField,
+  Timeline,
+  TimelineItem,
+  Tr,
 } from '../components/ui';
 import {
   ACTIVITY_LABEL,
@@ -36,6 +46,7 @@ import {
   money,
   relative,
 } from '../lib/format';
+import { cn } from '../lib/utils';
 
 interface Detail {
   client: Client;
@@ -79,9 +90,9 @@ export function ClientDetail() {
   if (loading) return <Loading rows={8} />;
   if (error || !data) {
     return (
-      <div className="content">
+      <PageBody>
         <ErrorNote onRetry={reload}>{error ?? 'Cliente no encontrado'}</ErrorNote>
-      </div>
+      </PageBody>
     );
   }
 
@@ -97,45 +108,51 @@ export function ClientDetail() {
         title={fullName}
         actions={
           <>
-            <Button onClick={() => navigate('/clientes')}>Volver</Button>
+            <Button variant="outline" onClick={() => navigate('/clientes')}>
+              Volver
+            </Button>
             {phone && (
-              <a
-                className="btn"
-                href={`https://wa.me/${phone.replace(/\D/g, '')}`}
-                target="_blank"
-                rel="noreferrer noopener"
-              >
-                WhatsApp
-              </a>
+              <Button asChild variant="outline">
+                <a
+                  href={`https://wa.me/${phone.replace(/\D/g, '')}`}
+                  target="_blank"
+                  rel="noreferrer noopener"
+                >
+                  <MessageCircle />
+                  WhatsApp
+                </a>
+              </Button>
             )}
             {editable && (
               <>
-                <Button onClick={() => setLinking(true)}>Vincular inmueble</Button>
-                <Button onClick={() => setMoving(true)}>Mover de etapa</Button>
-                <Button variant="primary" onClick={() => setLogging(true)}>
-                  Registrar gestión
+                <Button variant="outline" onClick={() => setLinking(true)}>
+                  Vincular inmueble
                 </Button>
+                <Button variant="outline" onClick={() => setMoving(true)}>
+                  Mover de etapa
+                </Button>
+                <Button onClick={() => setLogging(true)}>Registrar gestión</Button>
               </>
             )}
           </>
         }
       />
 
-      <div className="content stack">
-        <div className="grid" style={{ gridTemplateColumns: 'minmax(0, 1fr) minmax(0, 1.4fr)' }}>
-          <div className="stack">
+      <PageBody>
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)]">
+          <div className="flex flex-col gap-5">
             <Card>
-              <div className="row" style={{ gap: 12, marginBottom: 14 }}>
+              <div className="mb-3.5 flex items-center gap-3">
                 <Avatar name={fullName} large />
-                <div style={{ minWidth: 0 }}>
-                  <strong style={{ display: 'block' }}>{fullName}</strong>
+                <div className="min-w-0">
+                  <strong className="block font-medium">{fullName}</strong>
                   <span className="note">
                     Alta {date(client.createdAt)} · {relative(client.createdAt)}
                   </span>
                 </div>
               </div>
 
-              <div className="row row-wrap" style={{ gap: 6, marginBottom: 14 }}>
+              <div className="mb-3.5 flex flex-wrap gap-1.5">
                 <Badge color={client.stage.color}>{client.stage.name}</Badge>
                 {client.types.map((type) => (
                   <Badge key={type.id}>{type.name}</Badge>
@@ -143,9 +160,7 @@ export function ClientDetail() {
                 {client.source && <Badge tone="blue">{client.source.name}</Badge>}
               </div>
 
-              <div className="table-wrap">
-                <table className="data">
-                  <tbody>
+              <dl className="grid">
                     <Row label="Celular" value={client.cellPhone ?? '—'} mono />
                     <Row label="Teléfono" value={client.phone ?? '—'} mono />
                     <Row label="Correo" value={client.email ?? '—'} />
@@ -167,28 +182,18 @@ export function ClientDetail() {
                       label="En esta etapa"
                       value={client.stageChangedAt ? relative(client.stageChangedAt) : '—'}
                     />
-                  </tbody>
-                </table>
-              </div>
+              </dl>
             </Card>
 
             {client.requirement && (
               <Card title="Qué busca">
-                <p style={{ fontSize: 'var(--t-small)', whiteSpace: 'pre-wrap' }}>
-                  {client.requirement}
-                </p>
+                <p className="text-sm whitespace-pre-wrap">{client.requirement}</p>
               </Card>
             )}
 
             {client.notes && (
               <Card title="Notas heredadas de WASI">
-                <p
-                  style={{
-                    fontSize: 'var(--t-small)',
-                    whiteSpace: 'pre-wrap',
-                    color: 'var(--text-2)',
-                  }}
-                >
+                <p className="text-sm whitespace-pre-wrap text-muted-foreground">
                   {client.notes}
                 </p>
               </Card>
@@ -198,83 +203,94 @@ export function ClientDetail() {
 
             <Card title={`Inmuebles vinculados · ${interests.length}`} flush>
               {interests.length === 0 ? (
-                <Empty title="Sin inmuebles">
-                  Vincula los que le has mostrado para no perder el hilo del seguimiento.
-                </Empty>
+                <div className="p-5">
+                  <Empty title="Sin inmuebles">
+                    Vincula los que le has mostrado para no perder el hilo del seguimiento.
+                  </Empty>
+                </div>
               ) : (
-                <div className="table-wrap">
-                  <table className="data">
-                    <tbody>
+                <Table>
+                    <TBody>
                       {interests.map((interest) => (
-                        <tr key={interest.id}>
-                          <td>
+                        <Tr key={interest.id}>
+                          <Td>
                             {interest.property ? (
-                              <Link to={`/inmuebles/${interest.propertyId}`}>
-                                <strong>{interest.property.code}</strong>
-                                <div className="note" style={{ marginTop: 2 }}>
+                              <Link
+                                to={`/inmuebles/${interest.propertyId}`}
+                                className="hover:underline"
+                              >
+                                <strong className="tabular font-medium">
+                                  {interest.property.code}
+                                </strong>
+                                <div className="note mt-0.5">
                                   {interest.property.title.slice(0, 46)}
                                 </div>
                               </Link>
                             ) : (
                               '—'
                             )}
-                          </td>
-                          <td style={{ width: 100 }}>
+                          </Td>
+                          <Td className="w-[100px]">
                             <Badge>{INTEREST_ROLE_LABEL[interest.role]}</Badge>
-                          </td>
-                          <td className="note" style={{ width: 88 }}>
+                          </Td>
+                          <Td className="note w-[88px]">
                             {INTEREST_STATUS_LABEL[interest.status]}
-                          </td>
-                          <td className="num" style={{ width: 110 }}>
+                          </Td>
+                          <Td num className="w-[110px]">
                             {interest.offeredAmount ? money(interest.offeredAmount) : ''}
-                          </td>
-                        </tr>
+                          </Td>
+                        </Tr>
                       ))}
-                    </tbody>
-                  </table>
-                </div>
+                    </TBody>
+                </Table>
               )}
             </Card>
           </div>
 
           <Card title="Historial" flush>
             {timeline.length === 0 ? (
-              <Empty title="Sin gestiones registradas">
-                Cada llamada, visita o nota que anotes queda aquí en orden.
-              </Empty>
+              <div className="p-5">
+                <Empty title="Sin gestiones registradas">
+                  Cada llamada, visita o nota que anotes queda aquí en orden.
+                </Empty>
+              </div>
             ) : (
-              <div className="card-body">
-                <div className="timeline">
+              <div className="p-5">
+                <Timeline>
                   {timeline.map((entry) => (
-                    <article key={`${entry.kind}-${entry.id}`} className="tl-item">
-                      <span className="tl-mark" aria-hidden>
-                        {entry.kind === 'appointment' ? '◷' : (ACTIVITY_MARK[entry.type] ?? '·')}
-                      </span>
-                      <div className="tl-body">
-                        <div className="row spread" style={{ gap: 8, alignItems: 'baseline' }}>
-                          <strong>{entry.summary}</strong>
-                          <span className="note" style={{ whiteSpace: 'nowrap' }}>
-                            {relative(entry.at)}
-                          </span>
-                        </div>
-                        <div className="row" style={{ gap: 6, marginTop: 4 }}>
-                          <Badge tone={entry.automatic ? 'neutral' : 'blue'}>
-                            {entry.kind === 'appointment'
-                              ? APPOINTMENT_TYPE_LABEL[entry.type]
-                              : (ACTIVITY_LABEL[entry.type] ?? entry.type)}
-                          </Badge>
-                          <span className="note">{dateTime(entry.at)}</span>
-                        </div>
-                        {entry.detail && <p>{entry.detail}</p>}
+                    <TimelineItem
+                      key={`${entry.kind}-${entry.id}`}
+                      mark={
+                        entry.kind === 'appointment'
+                          ? '◷'
+                          : (ACTIVITY_MARK[entry.type] ?? '·')
+                      }
+                    >
+                      <div className="flex items-baseline justify-between gap-2">
+                        <strong className="text-sm font-medium">{entry.summary}</strong>
+                        <span className="note whitespace-nowrap">{relative(entry.at)}</span>
                       </div>
-                    </article>
+                      <div className="mt-1 flex items-center gap-1.5">
+                        <Badge tone={entry.automatic ? 'neutral' : 'blue'}>
+                          {entry.kind === 'appointment'
+                            ? APPOINTMENT_TYPE_LABEL[entry.type]
+                            : (ACTIVITY_LABEL[entry.type] ?? entry.type)}
+                        </Badge>
+                        <span className="note">{dateTime(entry.at)}</span>
+                      </div>
+                      {entry.detail && (
+                        <p className="mt-0.5 text-sm whitespace-pre-wrap text-muted-foreground">
+                          {entry.detail}
+                        </p>
+                      )}
+                    </TimelineItem>
                   ))}
-                </div>
+                </Timeline>
               </div>
             )}
           </Card>
         </div>
-      </div>
+      </PageBody>
 
       {logging && (
         <LogActivityModal
@@ -314,14 +330,13 @@ export function ClientDetail() {
   );
 }
 
+/** Una fila de la ficha: rotulo a la izquierda, dato a la derecha. */
 function Row({ label, value, mono }: { label: string; value: string; mono?: boolean }) {
   return (
-    <tr>
-      <td className="note" style={{ width: '42%' }}>
-        {label}
-      </td>
-      <td className={mono ? 'figure' : undefined}>{value}</td>
-    </tr>
+    <div className="flex items-baseline justify-between gap-4 border-b py-2.5 text-sm last:border-b-0">
+      <dt className="text-muted-foreground">{label}</dt>
+      <dd className={cn('text-right font-medium', mono && 'tabular')}>{value}</dd>
+    </div>
   );
 }
 
@@ -364,9 +379,10 @@ function LogActivityModal({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
-            variant="primary"
             loading={busy}
             disabled={!summary.trim()}
             onClick={() => void save()}
@@ -376,8 +392,8 @@ function LogActivityModal({
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
         <SelectField label="Tipo" value={type} onChange={(e) => setType(e.target.value)}>
           {['CALL', 'WHATSAPP', 'EMAIL', 'NOTE', 'OFFER'].map((value) => (
             <option key={value} value={value}>
@@ -454,15 +470,17 @@ function LinkPropertyModal({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
-          <Button variant="primary" loading={busy} disabled={!selected} onClick={() => void save()}>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button loading={busy} disabled={!selected} onClick={() => void save()}>
             Vincular
           </Button>
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
 
         <Field
           label="Buscar inmueble"
@@ -477,40 +495,36 @@ function LinkPropertyModal({
         />
 
         {selected ? (
-          <div className="card">
-            <div className="card-body row spread">
-              <div>
-                <strong className="figure">{selected.code}</strong>
-                <div className="note" style={{ marginTop: 2 }}>
-                  {selected.title.slice(0, 60)}
-                </div>
+          <CardShell>
+            <div className="flex items-center justify-between gap-3 p-4">
+              <div className="min-w-0">
+                <strong className="tabular font-medium">{selected.code}</strong>
+                <div className="note mt-0.5">{selected.title.slice(0, 60)}</div>
               </div>
-              <Button size="sm" onClick={() => setSelected(null)}>
+              <Button variant="outline" size="sm" onClick={() => setSelected(null)}>
                 Cambiar
               </Button>
             </div>
-          </div>
+          </CardShell>
         ) : (
           (results.data?.data ?? []).length > 0 && (
-            <div className="card" style={{ maxHeight: 220, overflowY: 'auto' }}>
-              <table className="data">
-                <tbody>
+            <CardShell className="max-h-[220px] overflow-y-auto">
+              <Table>
+                <TBody>
                   {results.data?.data.map((property) => (
-                    <tr key={property.id} className="clickable" onClick={() => setSelected(property)}>
-                      <td className="figure" style={{ width: 90 }}>
-                        {property.code}
-                      </td>
-                      <td>{property.title.slice(0, 48)}</td>
-                      <td className="num">{money(property.salePrice)}</td>
-                    </tr>
+                    <Tr key={property.id} onClick={() => setSelected(property)}>
+                      <Td className="tabular w-[90px]">{property.code}</Td>
+                      <Td>{property.title.slice(0, 48)}</Td>
+                      <Td num>{money(property.salePrice)}</Td>
+                    </Tr>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </TBody>
+              </Table>
+            </CardShell>
           )
         )}
 
-        <div className="grid" style={{ gridTemplateColumns: '1fr 1fr' }}>
+        <div className="grid gap-4 sm:grid-cols-2">
           <SelectField label="Rol" value={role} onChange={(e) => setRole(e.target.value)}>
             {Object.entries(INTEREST_ROLE_LABEL).map(([value, label]) => (
               <option key={value} value={value}>
@@ -570,9 +584,10 @@ function MoveStageModal({
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancelar</Button>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
           <Button
-            variant="primary"
             loading={busy}
             disabled={stageId === currentStageId}
             onClick={() => void save()}
@@ -582,8 +597,8 @@ function MoveStageModal({
         </>
       }
     >
-      <div className="stack">
-        {error && <div className="alert">{error}</div>}
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
         <SelectField label="Etapa" value={stageId} onChange={(e) => setStageId(e.target.value)}>
           {pipelines.map((pipeline) => (
             <optgroup key={pipeline.id} label={pipeline.name}>
