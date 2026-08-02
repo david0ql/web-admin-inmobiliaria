@@ -143,6 +143,31 @@ async function send<T>(path: string, options: RequestOptions, retry = true): Pro
   return data as T;
 }
 
+/**
+ * Descarga un fichero que exige sesión.
+ *
+ * Un `<a href>` no lleva la cabecera `Authorization`, así que para lo que está
+ * detrás de autenticación no vale: hay que pedirlo con `fetch`, tener el
+ * contenido en memoria y provocar la descarga desde ahí.
+ */
+export async function download(path: string, filename: string): Promise<void> {
+  const access = tokens.access;
+  const res = await fetch(`${BASE}${path}`, {
+    headers: access ? { Authorization: `Bearer ${access}` } : {},
+  });
+  if (!res.ok) {
+    throw new ApiError(res.status, 'No se pudo descargar el documento');
+  }
+
+  const url = URL.createObjectURL(await res.blob());
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  // Sin esto el blob se queda en memoria hasta que se recargue la pestaña.
+  URL.revokeObjectURL(url);
+}
+
 export const api = {
   get: <T>(path: string, query?: Record<string, unknown>, signal?: AbortSignal) =>
     send<T>(path, { query, signal }),

@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import {
   ApiError,
   api,
+  download,
   type ConsignmentDocumentType,
   type ConsignmentRequest,
   type ConsignmentStatus,
@@ -435,6 +436,9 @@ function ConsignmentDetail({
               <tbody>
                 {DOCUMENTS.map(({ type, label }) => {
                   const file = documents.find((doc) => doc.docType === type);
+                  // La posición es la que la API espera en la ruta: se pide por
+                  // índice y no por clave, para que la URL no valga sola.
+                  const index = file ? documents.indexOf(file) : -1;
                   return (
                     <tr key={type}>
                       <td>
@@ -447,14 +451,17 @@ function ConsignmentDetail({
                       </td>
                       <td style={{ width: 130 }}>
                         {file ? (
-                          <a
-                            className="btn btn-sm"
-                            href={file.url}
-                            target="_blank"
-                            rel="noreferrer noopener"
+                          <Button
+                            size="sm"
+                            onClick={() =>
+                              void download(
+                                `/consignments/${request.id}/documents/${index}`,
+                                file.originalName,
+                              )
+                            }
                           >
                             Descargar
-                          </a>
+                          </Button>
                         ) : (
                           <Badge tone="amber">Falta</Badge>
                         )}
@@ -475,14 +482,17 @@ function ConsignmentDetail({
                         </div>
                       </td>
                       <td style={{ width: 130 }}>
-                        <a
-                          className="btn btn-sm"
-                          href={document.url}
-                          target="_blank"
-                          rel="noreferrer noopener"
+                        <Button
+                          size="sm"
+                          onClick={() =>
+                            void download(
+                              `/consignments/${request.id}/documents/${documents.indexOf(document)}`,
+                              document.originalName,
+                            )
+                          }
                         >
                           Descargar
-                        </a>
+                        </Button>
                       </td>
                     </tr>
                   ))}
