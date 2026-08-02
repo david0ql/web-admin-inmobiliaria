@@ -1193,6 +1193,13 @@ th.num {
   color: var(--amber);
 }
 
+/* Confirmacion. `.alert` es roja por defecto: lo que sale bien no es un error. */
+.alert-ok {
+  border-color: var(--green-line);
+  background: var(--green-soft);
+  color: var(--green);
+}
+
 .spinner {
   width: 16px;
   height: 16px;

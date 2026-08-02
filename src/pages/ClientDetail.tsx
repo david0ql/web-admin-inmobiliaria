@@ -12,6 +12,7 @@ import {
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
 import { PageHeader } from '../components/Shell';
+import { PortalAccess } from '../components/PortalAccess';
 import {
   Avatar,
   Badge,
@@ -192,6 +193,8 @@ export function ClientDetail() {
                 </p>
               </Card>
             )}
+
+            <PortalAccess clientId={client.id} />
 
             <Card title={`Inmuebles vinculados · ${interests.length}`} flush>
               {interests.length === 0 ? (
