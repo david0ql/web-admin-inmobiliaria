@@ -47,7 +47,7 @@ interface Review {
   reviewedBy?: { firstName: string } | null
 }
 
-interface Detail extends Row {
+interface Detail extends Omit<Row, 'reviews'> {
   messages: Message[]
   reviews: Review[]
 }
@@ -161,7 +161,9 @@ export function Conversations() {
       {!rows ? (
         <Loading />
       ) : rows.length === 0 ? (
-        <Empty>Todavía no hay conversaciones que encajen.</Empty>
+        <Empty title="Nada por aquí">
+          Todavía no hay conversaciones que encajen con el filtro.
+        </Empty>
       ) : (
         <div className="space-y-2">
           {rows.map((row) => (
@@ -183,7 +185,7 @@ export function Conversations() {
                 </p>
               </div>
               {row.propertyCode && (
-                <Badge variant="outline">{row.propertyCode}</Badge>
+                <Badge tone="neutral">{row.propertyCode}</Badge>
               )}
               <span className="shrink-0 text-xs text-muted-foreground">
                 {row.messageCount} mensajes
