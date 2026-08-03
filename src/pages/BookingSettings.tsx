@@ -106,7 +106,24 @@ export function BookingSettings() {
     setSaving(true)
     setError(null)
     try {
-      const guardado = await api.put<Settings>('/settings/booking', settings)
+      /*
+        Solo lo editable.
+
+        Devolver el objeto entero incluía `id`, `createdAt`, `updatedAt` y
+        `deletedAt`, y la API los rechaza: no son cosa de quien edita, son de
+        la base. Mandarlos hacía que guardar fallase con cuatro mensajes
+        seguidos de "should not exist".
+      */
+      const guardado = await api.put<Settings>('/settings/booking', {
+        workdays: settings.workdays,
+        leadMode: settings.leadMode,
+        uniformLeadHours: settings.uniformLeadHours,
+        leadDaysByAvailability: settings.leadDaysByAvailability,
+        leadDaysByOperation: settings.leadDaysByOperation,
+        suggestedSlots: settings.suggestedSlots,
+        suggestedProperties: settings.suggestedProperties,
+        slotMinutes: settings.slotMinutes,
+      })
       setSettings(guardado)
       setSaved(true)
     } catch (e: unknown) {
