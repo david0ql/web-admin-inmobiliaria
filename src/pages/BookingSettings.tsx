@@ -33,6 +33,7 @@ interface Settings {
   leadDaysByAvailability: Record<string, number>
   leadDaysByOperation: { sale: number; rent: number }
   suggestedSlots: number
+  suggestedProperties: number
   slotMinutes: number
 }
 
@@ -215,18 +216,17 @@ export function BookingSettings() {
               </div>
 
               {settings.leadMode === 'UNIFORM' ? (
-                <Field label="Horas de antelación">
-                  <input
-                    type="number"
-                    min={0}
-                    max={720}
-                    value={settings.uniformLeadHours}
-                    onChange={(e) =>
-                      patch({ uniformLeadHours: Number(e.target.value) })
-                    }
-                    className="h-9 w-32 rounded-md border bg-background px-2 text-sm"
-                  />
-                </Field>
+                <Field
+                  label="Horas de antelación"
+                  type="number"
+                  min={0}
+                  max={720}
+                  className="w-40"
+                  value={settings.uniformLeadHours}
+                  onChange={(e) =>
+                    patch({ uniformLeadHours: Number(e.target.value) })
+                  }
+                />
               ) : (
                 <div className="space-y-3">
                   <div>
@@ -292,8 +292,19 @@ export function BookingSettings() {
               <CardTitle>Cómo propone las horas el chat</CardTitle>
             </CardHeader>
             <CardContent className="space-y-3">
-              <Field label="Cuántas horas próximas ofrece">
-                <input
+              <div className="grid gap-3 sm:grid-cols-2">
+                <Field
+                  label="Inmuebles que enseña al buscar"
+                  type="number"
+                  min={1}
+                  max={12}
+                  value={settings.suggestedProperties}
+                  onChange={(e) =>
+                    patch({ suggestedProperties: Number(e.target.value) })
+                  }
+                />
+                <Field
+                  label="Horarios que propone"
                   type="number"
                   min={1}
                   max={6}
@@ -301,28 +312,26 @@ export function BookingSettings() {
                   onChange={(e) =>
                     patch({ suggestedSlots: Number(e.target.value) })
                   }
-                  className="h-9 w-24 rounded-md border bg-background px-2 text-sm"
                 />
-              </Field>
+              </div>
               <p className="text-xs text-muted-foreground">
-                El chat propone las más cercanas —«¿te viene mañana a las 2 o a
-                las 3?»— en lugar de listar el calendario. El mismo inmueble lo
-                publican varias inmobiliarias: la visita se la lleva quien la
-                concreta antes.
+                Pocas y concretas: «¿te viene mañana a las 2 o a las 3?» en
+                lugar del calendario de la semana. Ocho opciones se repasan y se
+                dejan para luego; dos se eligen. El mismo inmueble lo publican
+                varias inmobiliarias y la visita se la lleva quien la concreta
+                antes. Los horarios salen de la agenda del asesor asignado al
+                inmueble.
               </p>
-              <Field label="Duración de cada visita (minutos)">
-                <input
-                  type="number"
-                  min={15}
-                  max={240}
-                  step={15}
-                  value={settings.slotMinutes}
-                  onChange={(e) =>
-                    patch({ slotMinutes: Number(e.target.value) })
-                  }
-                  className="h-9 w-24 rounded-md border bg-background px-2 text-sm"
-                />
-              </Field>
+              <Field
+                label="Duración de cada visita (minutos)"
+                type="number"
+                min={15}
+                max={240}
+                step={15}
+                className="w-32"
+                value={settings.slotMinutes}
+                onChange={(e) => patch({ slotMinutes: Number(e.target.value) })}
+              />
             </CardContent>
           </Card>
         </div>
