@@ -18,6 +18,7 @@ import { PipelineBoard } from './pages/PipelineBoard';
 import { Calendar } from './pages/Calendar';
 import { Portals } from './pages/Portals';
 import { Reports } from './pages/Reports';
+import { BookingSettings } from './pages/BookingSettings'
 import { Team } from './pages/Team';
 
 /**
@@ -67,6 +68,7 @@ export default function App() {
             <Route path="portales" element={<Portals />} />
             <Route path="informes" element={<Reports />} />
             <Route path="equipo" element={<Team />} />
+            <Route path="agenda-config" element={<BookingSettings />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

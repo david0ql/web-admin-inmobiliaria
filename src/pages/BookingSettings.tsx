@@ -1,0 +1,404 @@
+import { useEffect, useState } from 'react'
+import { CalendarClock, Check, Clock, Loader2 } from 'lucide-react'
+
+import {
+  Alert,
+  Button,
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  ErrorNote,
+  Field,
+  Loading,
+  PageBody,
+  SectionHeading,
+} from '@/components/ui'
+import { api } from '@/lib/api'
+import { cn } from '@/lib/utils'
+
+type LeadMode = 'UNIFORM' | 'BY_AVAILABILITY'
+
+interface Workday {
+  weekday: number
+  from: string
+  to: string
+  open: boolean
+}
+
+interface Settings {
+  workdays: Workday[]
+  leadMode: LeadMode
+  uniformLeadHours: number
+  leadDaysByAvailability: Record<string, number>
+  leadDaysByOperation: { sale: number; rent: number }
+  suggestedSlots: number
+  slotMinutes: number
+}
+
+const DIAS = [
+  { weekday: 1, label: 'Lunes' },
+  { weekday: 2, label: 'Martes' },
+  { weekday: 3, label: 'Miércoles' },
+  { weekday: 4, label: 'Jueves' },
+  { weekday: 5, label: 'Viernes' },
+  { weekday: 6, label: 'Sábado' },
+  { weekday: 0, label: 'Domingo' },
+]
+
+const ESTADOS = [
+  { key: 'AVAILABLE', label: 'Disponible' },
+  { key: 'RESERVED', label: 'Reservado' },
+  { key: 'WITHDRAWN', label: 'Retirado' },
+  { key: 'SOLD', label: 'Vendido' },
+  { key: 'RENTED', label: 'Arrendado' },
+]
+
+/**
+ * Los parámetros de la agenda.
+ *
+ * Antes vivían en el código —la jornada— y en una variable de entorno —la
+ * antelación—, así que cambiarlos pedía un despliegue. La pantalla existe para
+ * que la agencia los mueva sin llamar a nadie.
+ */
+export function BookingSettings() {
+  const [settings, setSettings] = useState<Settings | null>(null)
+  const [error, setError] = useState<string | null>(null)
+  const [saving, setSaving] = useState(false)
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    api
+      .get<Settings>('/settings/booking')
+      .then(setSettings)
+      .catch((e: unknown) =>
+        setError(e instanceof Error ? e.message : 'No pudimos cargar esto.'),
+      )
+  }, [])
+
+  const patch = (cambio: Partial<Settings>) => {
+    setSaved(false)
+    setSettings((prev) => (prev ? { ...prev, ...cambio } : prev))
+  }
+
+  const patchDia = (weekday: number, cambio: Partial<Workday>) => {
+    setSaved(false)
+    setSettings((prev) =>
+      prev
+        ? {
+            ...prev,
+            workdays: prev.workdays.map((d) =>
+              d.weekday === weekday ? { ...d, ...cambio } : d,
+            ),
+          }
+        : prev,
+    )
+  }
+
+  async function guardar() {
+    if (!settings) return
+    setSaving(true)
+    setError(null)
+    try {
+      const guardado = await api.put<Settings>('/settings/booking', settings)
+      setSettings(guardado)
+      setSaved(true)
+    } catch (e: unknown) {
+      setError(e instanceof Error ? e.message : 'No pudimos guardar.')
+    } finally {
+      setSaving(false)
+    }
+  }
+
+  if (error && !settings) return <ErrorNote>{error}</ErrorNote>
+  if (!settings) return <Loading />
+
+  const dia = (weekday: number) =>
+    settings.workdays.find((d) => d.weekday === weekday) ?? {
+      weekday,
+      from: '08:00',
+      to: '18:00',
+      open: false,
+    }
+
+  return (
+    <PageBody>
+      <SectionHeading light="Agenda" strong="de visitas" />
+      <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
+        Manda sobre lo que la web ofrece: si un horario no está aquí, no se
+        puede pedir cita a esa hora ni desde el formulario ni desde el chat.
+      </p>
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <Card>
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2">
+              <Clock className="size-4" /> Horario de atención
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-2">
+            {DIAS.map(({ weekday, label }) => {
+              const d = dia(weekday)
+              return (
+                <div
+                  key={weekday}
+                  className="flex items-center gap-3 border-b py-2 last:border-0"
+                >
+                  <label className="flex w-32 shrink-0 items-center gap-2 text-sm">
+                    <input
+                      type="checkbox"
+                      checked={d.open}
+                      onChange={(e) =>
+                        patchDia(weekday, { open: e.target.checked })
+                      }
+                      className="size-4"
+                    />
+                    {label}
+                  </label>
+                  {d.open ? (
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="time"
+                        value={d.from}
+                        onChange={(e) =>
+                          patchDia(weekday, { from: e.target.value })
+                        }
+                        className="h-9 rounded-md border bg-background px-2 text-sm"
+                      />
+                      <span className="text-muted-foreground">a</span>
+                      <input
+                        type="time"
+                        value={d.to}
+                        onChange={(e) =>
+                          patchDia(weekday, { to: e.target.value })
+                        }
+                        className="h-9 rounded-md border bg-background px-2 text-sm"
+                      />
+                    </div>
+                  ) : (
+                    <span className="text-sm text-muted-foreground">
+                      Cerrado
+                    </span>
+                  )}
+                </div>
+              )
+            })}
+          </CardContent>
+        </Card>
+
+        <div className="space-y-6">
+          <Card>
+            <CardHeader>
+              <CardTitle className="flex items-center gap-2">
+                <CalendarClock className="size-4" /> Con cuánta antelación
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              {/*
+                Las dos formas son excluyentes a propósito. Con los dos juegos
+                de campos siempre visibles nadie sabría cuál manda; así se elige
+                una y solo se ve la que aplica.
+              */}
+              <div className="grid gap-2 sm:grid-cols-2">
+                <ModoCard
+                  activo={settings.leadMode === 'UNIFORM'}
+                  titulo="La misma para todo"
+                  detalle="Sencillo de explicar por teléfono."
+                  onClick={() => patch({ leadMode: 'UNIFORM' })}
+                />
+                <ModoCard
+                  activo={settings.leadMode === 'BY_AVAILABILITY'}
+                  titulo="Según el inmueble"
+                  detalle="Un reservado necesita más margen que uno libre."
+                  onClick={() => patch({ leadMode: 'BY_AVAILABILITY' })}
+                />
+              </div>
+
+              {settings.leadMode === 'UNIFORM' ? (
+                <Field label="Horas de antelación">
+                  <input
+                    type="number"
+                    min={0}
+                    max={720}
+                    value={settings.uniformLeadHours}
+                    onChange={(e) =>
+                      patch({ uniformLeadHours: Number(e.target.value) })
+                    }
+                    className="h-9 w-32 rounded-md border bg-background px-2 text-sm"
+                  />
+                </Field>
+              ) : (
+                <div className="space-y-3">
+                  <div>
+                    <p className="micro-label mb-2">Por disponibilidad</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      {ESTADOS.map(({ key, label }) => (
+                        <DiasInput
+                          key={key}
+                          label={label}
+                          value={settings.leadDaysByAvailability?.[key] ?? 1}
+                          onChange={(v) =>
+                            patch({
+                              leadDaysByAvailability: {
+                                ...settings.leadDaysByAvailability,
+                                [key]: v,
+                              },
+                            })
+                          }
+                        />
+                      ))}
+                    </div>
+                  </div>
+                  <div>
+                    <p className="micro-label mb-2">Por operación</p>
+                    <div className="grid gap-2 sm:grid-cols-2">
+                      <DiasInput
+                        label="En venta"
+                        value={settings.leadDaysByOperation?.sale ?? 1}
+                        onChange={(v) =>
+                          patch({
+                            leadDaysByOperation: {
+                              ...settings.leadDaysByOperation,
+                              sale: v,
+                            },
+                          })
+                        }
+                      />
+                      <DiasInput
+                        label="En arriendo"
+                        value={settings.leadDaysByOperation?.rent ?? 2}
+                        onChange={(v) =>
+                          patch({
+                            leadDaysByOperation: {
+                              ...settings.leadDaysByOperation,
+                              rent: v,
+                            },
+                          })
+                        }
+                      />
+                    </div>
+                  </div>
+                  <Alert>
+                    Manda el más exigente de los dos. Un inmueble reservado y en
+                    arriendo espera lo que pida el más largo.
+                  </Alert>
+                </div>
+              )}
+            </CardContent>
+          </Card>
+
+          <Card>
+            <CardHeader>
+              <CardTitle>Cómo propone las horas el chat</CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-3">
+              <Field label="Cuántas horas próximas ofrece">
+                <input
+                  type="number"
+                  min={1}
+                  max={6}
+                  value={settings.suggestedSlots}
+                  onChange={(e) =>
+                    patch({ suggestedSlots: Number(e.target.value) })
+                  }
+                  className="h-9 w-24 rounded-md border bg-background px-2 text-sm"
+                />
+              </Field>
+              <p className="text-xs text-muted-foreground">
+                El chat propone las más cercanas —«¿te viene mañana a las 2 o a
+                las 3?»— en lugar de listar el calendario. El mismo inmueble lo
+                publican varias inmobiliarias: la visita se la lleva quien la
+                concreta antes.
+              </p>
+              <Field label="Duración de cada visita (minutos)">
+                <input
+                  type="number"
+                  min={15}
+                  max={240}
+                  step={15}
+                  value={settings.slotMinutes}
+                  onChange={(e) =>
+                    patch({ slotMinutes: Number(e.target.value) })
+                  }
+                  className="h-9 w-24 rounded-md border bg-background px-2 text-sm"
+                />
+              </Field>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+
+      {error && (
+        <div className="mt-4">
+          <ErrorNote>{error}</ErrorNote>
+        </div>
+      )}
+
+      <div className="mt-6 flex items-center gap-3">
+        <Button onClick={guardar} disabled={saving}>
+          {saving && <Loader2 className="size-4 animate-spin" />}
+          Guardar cambios
+        </Button>
+        {saved && (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Check className="size-4" /> Guardado. Ya aplica en la web.
+          </span>
+        )}
+      </div>
+    </PageBody>
+  )
+}
+
+function ModoCard({
+  activo,
+  titulo,
+  detalle,
+  onClick,
+}: {
+  activo: boolean
+  titulo: string
+  detalle: string
+  onClick: () => void
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={activo}
+      className={cn(
+        'rounded-lg border p-3 text-left transition-colors',
+        activo ? 'border-primary bg-primary/5' : 'hover:bg-secondary',
+      )}
+    >
+      <p className="text-sm font-medium">{titulo}</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">{detalle}</p>
+    </button>
+  )
+}
+
+function DiasInput({
+  label,
+  value,
+  onChange,
+}: {
+  label: string
+  value: number
+  onChange: (value: number) => void
+}) {
+  return (
+    <label className="flex items-center justify-between gap-2 rounded-md border px-3 py-2">
+      <span className="text-sm">{label}</span>
+      <span className="flex items-center gap-1.5">
+        <input
+          type="number"
+          min={0}
+          max={30}
+          value={value}
+          onChange={(e) => onChange(Number(e.target.value))}
+          className="h-8 w-16 rounded-md border bg-background px-2 text-sm"
+        />
+        <span className="text-xs text-muted-foreground">días</span>
+      </span>
+    </label>
+  )
+}

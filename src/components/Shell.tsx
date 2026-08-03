@@ -3,6 +3,7 @@ import { NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom
 import {
   BarChart3,
   Building2,
+  CalendarClock,
   CalendarDays,
   CreditCard,
   Globe,
@@ -55,6 +56,7 @@ const MANAGE: NavItem[] = [
   // A proposito distinto de `Users`: equipo y clientes tienen que leerse
   // aparte de un vistazo.
   { to: '/equipo', label: 'Equipo', icon: <UserCog /> },
+  { to: '/agenda-config', label: 'Horarios', icon: <CalendarClock /> },
 ];
 
 /*
