@@ -19,6 +19,8 @@ import { Calendar } from './pages/Calendar';
 import { Portals } from './pages/Portals';
 import { Reports } from './pages/Reports';
 import { BookingSettings } from './pages/BookingSettings'
+import { Conversations } from './pages/Conversations'
+import { AssistantRules } from './pages/AssistantRules'
 import { Team } from './pages/Team';
 
 /**
@@ -69,6 +71,8 @@ export default function App() {
             <Route path="informes" element={<Reports />} />
             <Route path="equipo" element={<Team />} />
             <Route path="agenda-config" element={<BookingSettings />} />
+            <Route path="conversaciones" element={<Conversations />} />
+            <Route path="asistente" element={<AssistantRules />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />
