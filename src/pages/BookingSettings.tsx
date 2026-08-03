@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { CalendarClock, Check, Clock, Loader2 } from 'lucide-react'
+import { CalendarClock, Check, Clock, Loader2, Plus, X } from 'lucide-react'
 
 import {
   Alert,
@@ -19,10 +19,15 @@ import { cn } from '@/lib/utils'
 
 type LeadMode = 'UNIFORM' | 'BY_AVAILABILITY'
 
-interface Workday {
-  weekday: number
+interface TimeRange {
   from: string
   to: string
+}
+
+interface Workday {
+  weekday: number
+  /** Varios tramos por día: mañana y tarde, con la pausa en medio. */
+  ranges: TimeRange[]
   open: boolean
 }
 
@@ -114,20 +119,28 @@ export function BookingSettings() {
   if (error && !settings) return <ErrorNote>{error}</ErrorNote>
   if (!settings) return <Loading />
 
-  const dia = (weekday: number) =>
+  const dia = (weekday: number): Workday =>
     settings.workdays.find((d) => d.weekday === weekday) ?? {
       weekday,
-      from: '08:00',
-      to: '18:00',
+      ranges: [{ from: '08:00', to: '12:00' }],
       open: false,
     }
+
+  const patchTramo = (weekday: number, i: number, cambio: Partial<TimeRange>) =>
+    patchDia(weekday, {
+      ranges: dia(weekday).ranges.map((r, j) =>
+        j === i ? { ...r, ...cambio } : r,
+      ),
+    })
 
   return (
     <PageBody>
       <SectionHeading light="Agenda" strong="de visitas" />
       <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
         Manda sobre lo que la web ofrece: si un horario no está aquí, no se
-        puede pedir cita a esa hora ni desde el formulario ni desde el chat.
+        puede pedir cita a esa hora ni desde el formulario ni desde el chat. Un
+        día puede tener varios tramos —mañana y tarde—; lo que queda entre
+        ellos no se ofrece.
       </p>
 
       <div className="grid gap-6 lg:grid-cols-2">
@@ -143,9 +156,9 @@ export function BookingSettings() {
               return (
                 <div
                   key={weekday}
-                  className="flex items-center gap-3 border-b py-2 last:border-0"
+                  className="flex flex-wrap items-start gap-3 border-b py-2.5 last:border-0"
                 >
-                  <label className="flex w-32 shrink-0 items-center gap-2 text-sm">
+                  <label className="flex w-32 shrink-0 items-center gap-2 pt-1.5 text-sm">
                     <input
                       type="checkbox"
                       checked={d.open}
@@ -156,28 +169,63 @@ export function BookingSettings() {
                     />
                     {label}
                   </label>
+
                   {d.open ? (
-                    <div className="flex items-center gap-2">
-                      <input
-                        type="time"
-                        value={d.from}
-                        onChange={(e) =>
-                          patchDia(weekday, { from: e.target.value })
-                        }
-                        className="h-9 rounded-md border bg-background px-2 text-sm"
-                      />
-                      <span className="text-muted-foreground">a</span>
-                      <input
-                        type="time"
-                        value={d.to}
-                        onChange={(e) =>
-                          patchDia(weekday, { to: e.target.value })
-                        }
-                        className="h-9 rounded-md border bg-background px-2 text-sm"
-                      />
+                    <div className="flex flex-col gap-1.5">
+                      {d.ranges.map((r, i) => (
+                        <div key={i} className="flex items-center gap-2">
+                          <input
+                            type="time"
+                            value={r.from}
+                            onChange={(e) =>
+                              patchTramo(weekday, i, { from: e.target.value })
+                            }
+                            className="h-9 rounded-md border bg-background px-2 text-sm"
+                          />
+                          <span className="text-muted-foreground">a</span>
+                          <input
+                            type="time"
+                            value={r.to}
+                            onChange={(e) =>
+                              patchTramo(weekday, i, { to: e.target.value })
+                            }
+                            className="h-9 rounded-md border bg-background px-2 text-sm"
+                          />
+                          {d.ranges.length > 1 && (
+                            <button
+                              type="button"
+                              aria-label={`Quitar tramo de ${label}`}
+                              onClick={() =>
+                                patchDia(weekday, {
+                                  ranges: d.ranges.filter((_, j) => j !== i),
+                                })
+                              }
+                              className="rounded-md p-1.5 text-muted-foreground hover:bg-secondary"
+                            >
+                              <X className="size-4" />
+                            </button>
+                          )}
+                        </div>
+                      ))}
+                      {d.ranges.length < 4 && (
+                        <button
+                          type="button"
+                          onClick={() =>
+                            patchDia(weekday, {
+                              ranges: [
+                                ...d.ranges,
+                                { from: '14:00', to: '18:00' },
+                              ],
+                            })
+                          }
+                          className="flex w-fit items-center gap-1 rounded-md px-1 py-0.5 text-xs text-muted-foreground hover:bg-secondary"
+                        >
+                          <Plus className="size-3.5" /> Añadir tramo
+                        </button>
+                      )}
                     </div>
                   ) : (
-                    <span className="text-sm text-muted-foreground">
+                    <span className="pt-1.5 text-sm text-muted-foreground">
                       Cerrado
                     </span>
                   )}
