@@ -21,6 +21,7 @@ type Source = 'RECENT' | 'OUTSTANDING' | 'MANUAL'
 type Effect = 'SLIDE' | 'FADE'
 
 interface Settings {
+  enabled: boolean
   source: Source
   codes: string[]
   count: number
@@ -82,6 +83,7 @@ export function HomeShowcase() {
     setError(null)
     try {
       const guardado = await api.put<Settings>('/settings/home', {
+        enabled: settings.enabled,
         source: settings.source,
         codes: settings.codes,
         count: settings.count,
@@ -111,11 +113,45 @@ export function HomeShowcase() {
   return (
     <PageBody>
       <SectionHeading light="Portada" strong="del sitio" />
-      <p className="mb-6 max-w-2xl text-sm text-muted-foreground">
+      <p className="mb-5 max-w-2xl text-sm text-muted-foreground">
         El carrusel de inmuebles que ve cualquiera que entre en la web.
       </p>
 
-      <div className="grid gap-6 lg:grid-cols-2">
+      {/* El interruptor va arriba y aparte: es lo primero que se decide, y lo
+          de abajo solo tiene sentido si esta encendido. */}
+      <label
+        className={cn(
+          'mb-6 flex items-start gap-3 rounded-lg border p-4 transition-colors',
+          settings.enabled ? 'border-primary bg-primary/5' : 'bg-secondary/40',
+        )}
+      >
+        <input
+          type="checkbox"
+          checked={settings.enabled}
+          onChange={(e) => patch({ enabled: e.target.checked })}
+          className="mt-0.5 size-4"
+        />
+        <span>
+          <span className="block text-sm font-medium">
+            {settings.enabled
+              ? 'El carrusel se está enseñando'
+              : 'El carrusel está apagado'}
+          </span>
+          <span className="block text-xs text-muted-foreground">
+            {settings.enabled
+              ? 'Aparece en la portada, debajo de los proyectos.'
+              : 'La sección entera desaparece de la portada. Lo de abajo se guarda: al encenderlo vuelve como lo dejaste.'}
+          </span>
+        </span>
+      </label>
+
+      <div
+        className={cn(
+          'grid gap-6 lg:grid-cols-2',
+          !settings.enabled && 'pointer-events-none opacity-50',
+        )}
+        aria-hidden={!settings.enabled}
+      >
         <Card>
           <CardHeader>
             <CardTitle>Qué inmuebles salen</CardTitle>
