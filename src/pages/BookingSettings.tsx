@@ -4,6 +4,7 @@ import { CalendarClock, Check, Clock, Loader2, Plus, X } from 'lucide-react'
 import {
   Alert,
   Button,
+  CacheNote,
   Card,
   CardContent,
   CardHeader,
@@ -407,6 +408,8 @@ export function BookingSettings() {
           <ErrorNote>{error}</ErrorNote>
         </div>
       )}
+
+      <CacheNote />
 
       <div className="mt-6 flex items-center gap-3">
         <Button onClick={guardar} disabled={saving}>

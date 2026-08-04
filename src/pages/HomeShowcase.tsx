@@ -4,6 +4,7 @@ import { Check, Loader2, Plus, X } from 'lucide-react'
 import {
   Alert,
   Button,
+  CacheNote,
   Card,
   CardContent,
   CardHeader,
@@ -317,6 +318,8 @@ export function HomeShowcase() {
           <ErrorNote>{error}</ErrorNote>
         </div>
       )}
+
+      <CacheNote />
 
       <div className="mt-6 flex items-center gap-3">
         <Button onClick={() => void guardar()} disabled={saving}>
