@@ -21,6 +21,7 @@ import { Reports } from './pages/Reports';
 import { BookingSettings } from './pages/BookingSettings'
 import { Conversations } from './pages/Conversations'
 import { AssistantRules } from './pages/AssistantRules'
+import { HomeShowcase } from './pages/HomeShowcase'
 import { Team } from './pages/Team';
 
 /**
@@ -73,6 +74,7 @@ export default function App() {
             <Route path="agenda-config" element={<BookingSettings />} />
             <Route path="conversaciones" element={<Conversations />} />
             <Route path="asistente" element={<AssistantRules />} />
+            <Route path="portada" element={<HomeShowcase />} />
           </Route>
 
           <Route path="*" element={<Navigate to="/" replace />} />

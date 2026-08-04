@@ -4,6 +4,7 @@ import {
   BarChart3,
   Building2,
   CalendarClock,
+  LayoutTemplate,
   MessageSquare,
   Sparkles,
   CalendarDays,
@@ -59,6 +60,7 @@ const MANAGE: NavItem[] = [
   // aparte de un vistazo.
   { to: '/equipo', label: 'Equipo', icon: <UserCog /> },
   { to: '/agenda-config', label: 'Horarios', icon: <CalendarClock /> },
+  { to: '/portada', label: 'Portada', icon: <LayoutTemplate /> },
   { to: '/conversaciones', label: 'Conversaciones', icon: <MessageSquare /> },
   { to: '/asistente', label: 'Asistente', icon: <Sparkles /> },
 ];
