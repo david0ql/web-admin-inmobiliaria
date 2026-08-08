@@ -1,5 +1,14 @@
 import { useEffect, useState } from 'react'
-import { Check, Loader2, MessageSquare, Search, Sparkles } from 'lucide-react'
+import {
+  Check,
+  Loader2,
+  Mail,
+  MessageSquare,
+  Phone,
+  Search,
+  Sparkles,
+  X,
+} from 'lucide-react'
 
 import {
   Alert,
@@ -21,13 +30,20 @@ import {
 import { api } from '@/lib/api'
 import { cn } from '@/lib/utils'
 
-interface Row {
+interface Client {
   id: string
-  propertyCode: string | null
-  lastMessageAt: string
-  messageCount: number
+  firstName: string
+  lastName: string | null
+  email: string | null
+  cellPhone: string | null
+}
+
+interface Row {
+  client: Client
+  conversations: number
+  messages: number
   reviews: number
-  client: { id: string; firstName: string; lastName: string | null; email: string | null; cellPhone: string | null }
+  lastMessageAt: string
 }
 
 interface Message {
@@ -37,8 +53,17 @@ interface Message {
   createdAt: string
 }
 
+interface Conversation {
+  id: string
+  propertyCode: string | null
+  createdAt: string
+  lastMessageAt: string
+  messages: Message[]
+}
+
 interface Review {
   id: string
+  conversationId: string
   issues: string[]
   comment: string
   suggestedRule: string | null
@@ -47,8 +72,9 @@ interface Review {
   reviewedBy?: { firstName: string } | null
 }
 
-interface Detail extends Omit<Row, 'reviews'> {
-  messages: Message[]
+interface Thread {
+  client: Client
+  conversations: Conversation[]
   reviews: Review[]
 }
 
@@ -57,42 +83,72 @@ interface Issue {
   label: string
 }
 
+const LIMITE = 20
+
 /**
- * El histórico del chat.
+ * El histórico del chat, por persona.
  *
- * Existe para una cosa: leer lo que contestó el asistente y decir qué falló.
- * De ahí sale la regla que lo corrige, así que la pantalla está montada para
- * llegar rápido a una conversación concreta —de ahí los filtros— y para que
- * calificar sea cuestión de dos clics y una frase.
+ * Una fila por cliente y no por conversación: quien vuelve tres veces generaba
+ * tres filas idénticas y había que abrir las tres para entender una sola
+ * historia. Aquí se abre una vez y se lee todo seguido, con una línea que marca
+ * dónde terminó una visita y empezó la siguiente.
+ *
+ * Sigue existiendo para lo mismo: leer lo que contestó el asistente y decir qué
+ * falló, porque de ahí sale la regla que lo corrige.
  */
 export function Conversations() {
   const [rows, setRows] = useState<Row[] | null>(null)
   const [total, setTotal] = useState(0)
   const [page, setPage] = useState(1)
-  const [q, setQ] = useState('')
+  const [filtros, setFiltros] = useState({ name: '', email: '', phone: '' })
+  const [aplicados, setAplicados] = useState(filtros)
   const [reviewed, setReviewed] = useState<'' | 'yes' | 'no'>('')
   const [error, setError] = useState<string | null>(null)
-  const [abierta, setAbierta] = useState<string | null>(null)
+  const [abierto, setAbierto] = useState<Client | null>(null)
 
-  const cargar = () => {
+  useEffect(() => {
+    let vigente = true
     setRows(null)
     api
-      .get<{ data: Row[]; meta: { total: number } }>('/assistant/conversations', {
-        q: q || undefined,
-        reviewed: reviewed || undefined,
-        page,
-        limit: 20,
-      })
+      .get<{ data: Row[]; meta: { total: number } }>(
+        '/assistant/conversations',
+        {
+          name: aplicados.name || undefined,
+          email: aplicados.email || undefined,
+          phone: aplicados.phone || undefined,
+          reviewed: reviewed || undefined,
+          page,
+          limit: LIMITE,
+        },
+      )
       .then((res) => {
+        // Si mientras tanto se cambió de página, esta respuesta ya no vale.
+        if (!vigente) return
         setRows(res.data)
         setTotal(res.meta.total)
       })
-      .catch((e: unknown) =>
-        setError(e instanceof Error ? e.message : 'No pudimos cargar esto.'),
-      )
+      .catch((e: unknown) => {
+        if (vigente)
+          setError(e instanceof Error ? e.message : 'No pudimos cargar esto.')
+      })
+    return () => {
+      vigente = false
+    }
+  }, [page, reviewed, aplicados])
+
+  const buscar = () => {
+    setPage(1)
+    setAplicados(filtros)
   }
 
-  useEffect(cargar, [page, reviewed])
+  const limpiar = () => {
+    const vacio = { name: '', email: '', phone: '' }
+    setFiltros(vacio)
+    setAplicados(vacio)
+    setPage(1)
+  }
+
+  const hayFiltro = Object.values(aplicados).some(Boolean)
 
   if (error && !rows) return <ErrorNote>{error}</ErrorNote>
 
@@ -100,125 +156,151 @@ export function Conversations() {
     <PageBody>
       <SectionHeading light="Conversaciones" strong="del chat" />
       <p className="mb-5 max-w-2xl text-sm text-muted-foreground">
-        Lo que la gente le pregunta al asistente y lo que contestó. Al calificar
-        una respuesta, el asistente propone cómo corregirse.
+        Lo que la gente le pregunta al asistente y lo que contestó, agrupado por
+        persona. Al calificar una respuesta, el asistente propone cómo
+        corregirse.
       </p>
 
-      <div className="mb-4 flex flex-wrap items-center gap-2">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault()
-            setPage(1)
-            cargar()
-          }}
-          className="flex min-w-0 flex-1 gap-2"
-        >
-          {/* Una sola caja: quien busca no se para a pensar si lo que recuerda
-              es el nombre, el correo o el teléfono. */}
-          <div className="relative min-w-0 flex-1">
-            <Search className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
-            <input
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="Nombre, correo o teléfono…"
-              className="h-9 w-full rounded-md border bg-background pr-3 pl-9 text-sm"
-            />
-          </div>
-          <Button type="submit" size="sm" variant="outline">
+      <form
+        onSubmit={(e) => {
+          e.preventDefault()
+          buscar()
+        }}
+        className="mb-4 space-y-3 rounded-lg border p-3"
+      >
+        {/* Tres campos separados y no una caja única: quien revisa suele venir
+            del CRM con el dato exacto delante —el teléfono de una ficha, el
+            correo de un correo— y buscar por ese campo evita los falsos
+            positivos de mezclarlos todos. */}
+        <div className="grid gap-2 sm:grid-cols-3">
+          <Filtro
+            icon={Search}
+            placeholder="Nombre o apellidos"
+            value={filtros.name}
+            onChange={(name) => setFiltros((f) => ({ ...f, name }))}
+          />
+          <Filtro
+            icon={Mail}
+            type="email"
+            placeholder="Correo"
+            value={filtros.email}
+            onChange={(email) => setFiltros((f) => ({ ...f, email }))}
+          />
+          <Filtro
+            icon={Phone}
+            type="tel"
+            placeholder="Teléfono"
+            value={filtros.phone}
+            onChange={(phone) => setFiltros((f) => ({ ...f, phone }))}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-2">
+          <Button type="submit" size="sm">
             Buscar
           </Button>
-        </form>
+          {hayFiltro && (
+            <Button type="button" size="sm" variant="ghost" onClick={limpiar}>
+              <X className="size-4" /> Quitar filtros
+            </Button>
+          )}
 
-        <div className="flex gap-1 rounded-md border p-0.5">
-          {(
-            [
-              ['', 'Todas'],
-              ['no', 'Sin calificar'],
-              ['yes', 'Calificadas'],
-            ] as const
-          ).map(([value, label]) => (
-            <button
-              key={value}
-              type="button"
-              onClick={() => {
-                setReviewed(value)
-                setPage(1)
-              }}
-              aria-pressed={reviewed === value}
-              className={cn(
-                'rounded px-2.5 py-1 text-xs font-medium transition-colors',
-                reviewed === value
-                  ? 'bg-primary text-primary-foreground'
-                  : 'hover:bg-secondary',
-              )}
-            >
-              {label}
-            </button>
-          ))}
+          <div className="ml-auto flex gap-1 rounded-md border p-0.5">
+            {(
+              [
+                ['', 'Todas'],
+                ['no', 'Sin calificar'],
+                ['yes', 'Calificadas'],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => {
+                  setReviewed(value)
+                  setPage(1)
+                }}
+                aria-pressed={reviewed === value}
+                className={cn(
+                  'rounded px-2.5 py-1 text-xs font-medium transition-colors',
+                  reviewed === value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'hover:bg-secondary',
+                )}
+              >
+                {label}
+              </button>
+            ))}
+          </div>
         </div>
-      </div>
+      </form>
 
       {!rows ? (
         <Loading />
       ) : rows.length === 0 ? (
         <Empty title="Nada por aquí">
-          Todavía no hay conversaciones que encajen con el filtro.
+          {hayFiltro
+            ? 'Ninguna persona encaja con lo que buscas.'
+            : 'Todavía nadie ha escrito al asistente.'}
         </Empty>
       ) : (
         <div className="space-y-2">
           {rows.map((row) => (
             <button
-              key={row.id}
+              key={row.client.id}
               type="button"
-              onClick={() => setAbierta(row.id)}
+              onClick={() => setAbierto(row.client)}
               className="flex w-full items-center gap-3 rounded-lg border p-3 text-left transition-colors hover:bg-secondary"
             >
-              <MessageSquare className="size-4 shrink-0 text-muted-foreground" />
+              <Avatar client={row.client} />
               <div className="min-w-0 flex-1">
                 <p className="truncate text-sm font-medium">
-                  {row.client.firstName} {row.client.lastName ?? ''}
+                  {nombre(row.client)}
                 </p>
                 <p className="truncate text-xs text-muted-foreground">
                   {[row.client.cellPhone, row.client.email]
                     .filter(Boolean)
-                    .join(' · ')}
+                    .join(' · ') || 'Sin datos de contacto'}
                 </p>
               </div>
-              {row.propertyCode && (
-                <Badge tone="neutral">{row.propertyCode}</Badge>
-              )}
-              <span className="shrink-0 text-xs text-muted-foreground">
-                {row.messageCount} mensajes
+
+              <span className="hidden shrink-0 items-center gap-1 text-xs text-muted-foreground sm:flex">
+                <MessageSquare className="size-3.5" />
+                {row.conversations === 1
+                  ? '1 conversación'
+                  : `${row.conversations} conversaciones`}
+              </span>
+              <span className="tabular hidden shrink-0 text-xs text-muted-foreground md:block">
+                {row.messages} mensajes
               </span>
               {row.reviews > 0 && (
-                <Badge>{row.reviews} calificada{row.reviews > 1 ? 's' : ''}</Badge>
+                <Badge>
+                  {row.reviews} calificada{row.reviews > 1 ? 's' : ''}
+                </Badge>
               )}
-              <span className="hidden shrink-0 text-xs text-muted-foreground sm:block">
-                {new Date(row.lastMessageAt).toLocaleDateString('es-CO', {
-                  day: '2-digit',
-                  month: 'short',
-                  hour: '2-digit',
-                  minute: '2-digit',
-                })}
+              <span className="hidden shrink-0 text-xs text-muted-foreground lg:block">
+                {fecha(row.lastMessageAt)}
               </span>
             </button>
           ))}
           <Pager
             page={page}
-            pages={Math.max(1, Math.ceil(total / 20))}
+            pages={Math.max(1, Math.ceil(total / LIMITE))}
             total={total}
-            unit="conversaciones"
+            unit="personas"
             onPage={setPage}
           />
         </div>
       )}
 
-      {abierta && (
-        <ConversationDetail
-          id={abierta}
+      {abierto && (
+        <ClientThread
+          client={abierto}
           onClose={() => {
-            setAbierta(null)
-            cargar()
+            setAbierto(null)
+            // Al cerrar puede haber una calificación nueva: se recarga la
+            // página actual para que el contador de la fila cuadre.
+            setAplicados((f) => ({ ...f }))
           }}
         />
       )}
@@ -226,78 +308,237 @@ export function Conversations() {
   )
 }
 
-function ConversationDetail({
-  id,
+function Filtro({
+  icon: Icon,
+  value,
+  onChange,
+  placeholder,
+  type = 'text',
+}: {
+  icon: typeof Search
+  value: string
+  onChange: (value: string) => void
+  placeholder: string
+  type?: string
+}) {
+  return (
+    <div className="relative">
+      <Icon className="absolute top-1/2 left-3 size-4 -translate-y-1/2 text-muted-foreground" />
+      <input
+        type={type}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder={placeholder}
+        className="h-9 w-full rounded-md border bg-background pr-3 pl-9 text-sm"
+      />
+    </div>
+  )
+}
+
+/**
+ * Todo lo que ha hablado una persona, seguido.
+ *
+ * Las conversaciones van una detrás de otra separadas por una línea con su
+ * fecha: se lee como un hilo de mensajería, que es como la gente entiende una
+ * conversación, sin perder de vista que hubo varias visitas distintas.
+ */
+function ClientThread({
+  client,
   onClose,
 }: {
-  id: string
+  client: Client
   onClose: () => void
 }) {
-  const [detail, setDetail] = useState<Detail | null>(null)
-  const [calificando, setCalificando] = useState(false)
+  const [thread, setThread] = useState<Thread | null>(null)
+  const [calificando, setCalificando] = useState<string | null>(null)
 
   const cargar = () =>
-    api.get<Detail>(`/assistant/conversations/${id}`).then(setDetail)
+    api.get<Thread>(`/assistant/clients/${client.id}/thread`).then(setThread)
 
   useEffect(() => {
     void cargar()
-  }, [id])
+  }, [client.id])
+
+  const mensajes =
+    thread?.conversations.reduce((n, c) => n + c.messages.length, 0) ?? 0
 
   return (
-    <Modal onClose={onClose} title="Conversación" wide>
-      {!detail ? (
+    <Modal onClose={onClose} title={nombre(client)} wide>
+      {!thread ? (
         <Loading />
       ) : (
         <div className="space-y-4">
-          <div className="text-sm">
-            <p className="font-medium">
-              {detail.client.firstName} {detail.client.lastName ?? ''}
-            </p>
-            <p className="text-xs text-muted-foreground">
-              {[detail.client.cellPhone, detail.client.email]
-                .filter(Boolean)
-                .join(' · ')}
+          {/* La cabecera es lo primero que se mira: quién es y cómo se le
+              contesta. Los datos de contacto son enlaces porque lo siguiente
+              que hace quien revisa es llamar o escribir. */}
+          <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-secondary/30 p-3">
+            <Avatar client={client} size="lg" />
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-sm font-medium">{nombre(client)}</p>
+              <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+                {client.cellPhone && (
+                  <a
+                    href={`tel:${client.cellPhone}`}
+                    className="flex items-center gap-1 hover:text-foreground"
+                  >
+                    <Phone className="size-3.5" /> {client.cellPhone}
+                  </a>
+                )}
+                {client.email && (
+                  <a
+                    href={`mailto:${client.email}`}
+                    className="flex items-center gap-1 truncate hover:text-foreground"
+                  >
+                    <Mail className="size-3.5" /> {client.email}
+                  </a>
+                )}
+              </div>
+            </div>
+            <p className="text-right text-xs text-muted-foreground">
+              {thread.conversations.length === 1
+                ? '1 conversación'
+                : `${thread.conversations.length} conversaciones`}
+              <br />
+              {mensajes} mensajes
             </p>
           </div>
 
-          <div className="max-h-[45vh] space-y-2 overflow-y-auto rounded-lg border bg-secondary/30 p-3">
-            {detail.messages.map((m) => (
-              <div
-                key={m.id}
-                className={cn(
-                  'max-w-[85%] rounded-lg px-3 py-2 text-sm whitespace-pre-wrap',
-                  m.role === 'user'
-                    ? 'ml-auto bg-primary text-primary-foreground'
-                    : 'bg-card border',
+          <div className="max-h-[52vh] space-y-3 overflow-y-auto rounded-lg border bg-secondary/20 p-3">
+            {thread.conversations.map((conversation, i) => (
+              <section key={conversation.id} className="space-y-2">
+                {/* La línea separadora: sin ella los mensajes de una visita de
+                    hace un mes parecen la continuación de los de ayer. */}
+                <div
+                  className={cn(
+                    'flex items-center gap-2',
+                    i > 0 && 'pt-3',
+                  )}
+                >
+                  <span className="h-px flex-1 bg-border" />
+                  <span className="flex items-center gap-1.5 rounded-full border bg-background px-2.5 py-0.5 text-[11px] text-muted-foreground">
+                    {fecha(conversation.createdAt)}
+                    {conversation.propertyCode && (
+                      <span className="tabular font-medium text-foreground">
+                        · {conversation.propertyCode}
+                      </span>
+                    )}
+                  </span>
+                  <span className="h-px flex-1 bg-border" />
+                </div>
+
+                {conversation.messages.map((m) => (
+                  <div
+                    key={m.id}
+                    className={cn(
+                      'flex flex-col gap-0.5',
+                      m.role === 'user' ? 'items-end' : 'items-start',
+                    )}
+                  >
+                    <div
+                      className={cn(
+                        'max-w-[85%] rounded-2xl px-3 py-2 text-sm whitespace-pre-wrap',
+                        m.role === 'user'
+                          ? 'rounded-br-sm bg-primary text-primary-foreground'
+                          : 'rounded-bl-sm border bg-card',
+                      )}
+                    >
+                      {m.content}
+                    </div>
+                    <span className="px-1 text-[10px] text-muted-foreground">
+                      {hora(m.createdAt)}
+                    </span>
+                  </div>
+                ))}
+
+                {thread.reviews
+                  .filter((r) => r.conversationId === conversation.id)
+                  .map((review) => (
+                    <ReviewCard
+                      key={review.id}
+                      review={review}
+                      onApplied={cargar}
+                    />
+                  ))}
+
+                {calificando === conversation.id ? (
+                  <ReviewForm
+                    conversationId={conversation.id}
+                    onDone={() => {
+                      setCalificando(null)
+                      void cargar()
+                    }}
+                    onCancel={() => setCalificando(null)}
+                  />
+                ) : (
+                  <div className="flex justify-center pt-1">
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      onClick={() => setCalificando(conversation.id)}
+                    >
+                      Calificar esta conversación
+                    </Button>
+                  </div>
                 )}
-              >
-                {m.content}
-              </div>
+              </section>
             ))}
           </div>
-
-          {detail.reviews.map((review) => (
-            <ReviewCard key={review.id} review={review} onApplied={cargar} />
-          ))}
-
-          {calificando ? (
-            <ReviewForm
-              conversationId={id}
-              onDone={() => {
-                setCalificando(false)
-                void cargar()
-              }}
-              onCancel={() => setCalificando(false)}
-            />
-          ) : (
-            <Button onClick={() => setCalificando(true)}>
-              Calificar esta conversación
-            </Button>
-          )}
         </div>
       )}
     </Modal>
   )
+}
+
+function Avatar({
+  client,
+  size = 'md',
+}: {
+  client: Client
+  size?: 'md' | 'lg'
+}) {
+  const iniciales = `${client.firstName?.[0] ?? ''}${client.lastName?.[0] ?? ''}`
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'flex shrink-0 items-center justify-center rounded-full bg-primary/10 font-medium text-primary',
+        size === 'lg' ? 'size-11 text-base' : 'size-9 text-xs',
+      )}
+    >
+      {iniciales.toUpperCase() || '?'}
+    </span>
+  )
+}
+
+function nombre(client: Client): string {
+  return `${client.firstName} ${client.lastName ?? ''}`.trim()
+}
+
+/*
+  Todo se pinta en hora de Colombia y no en la del navegador.
+
+  Quien revisa puede estar en otro huso —o tener el portátil mal puesto— y una
+  conversación de las 8 de la mañana leída como las 6 no cuadra con nada: ni con
+  la agenda, ni con lo que dice el propio chat. La agencia trabaja en GMT-5, así
+  que la pantalla habla en GMT-5.
+*/
+const COLOMBIA = 'America/Bogota'
+
+function fecha(iso: string): string {
+  return new Date(iso).toLocaleDateString('es-CO', {
+    timeZone: COLOMBIA,
+    day: '2-digit',
+    month: 'short',
+    year: 'numeric',
+  })
+}
+
+function hora(iso: string): string {
+  return new Date(iso).toLocaleTimeString('es-CO', {
+    timeZone: COLOMBIA,
+    hour: '2-digit',
+    minute: '2-digit',
+  })
 }
 
 function ReviewCard({
