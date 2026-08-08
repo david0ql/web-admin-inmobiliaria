@@ -374,8 +374,9 @@ function ClientThread({
           <div className="flex flex-wrap items-center gap-3 rounded-lg border bg-secondary/30 p-3">
             <Avatar client={client} size="lg" />
             <div className="min-w-0 flex-1">
-              <p className="truncate text-sm font-medium">{nombre(client)}</p>
-              <div className="mt-1 flex flex-wrap gap-3 text-xs text-muted-foreground">
+              {/* Sin repetir el nombre: ya está en el título del modal, dos
+                  líneas más arriba. */}
+              <div className="flex flex-wrap gap-3 text-xs text-muted-foreground">
                 {client.cellPhone && (
                   <a
                     href={`tel:${client.cellPhone}`}
@@ -426,7 +427,7 @@ function ClientThread({
                   <span className="h-px flex-1 bg-border" />
                 </div>
 
-                {conversation.messages.map((m) => (
+                {conversation.messages.map((m, j) => (
                   <div
                     key={m.id}
                     className={cn(
@@ -444,9 +445,15 @@ function ClientThread({
                     >
                       {m.content}
                     </div>
-                    <span className="px-1 text-[10px] text-muted-foreground">
-                      {hora(m.createdAt)}
-                    </span>
+                    {/* La hora solo cuando aporta: bajo cada burbuja son
+                        veintiocho marcas de tiempo que nadie lee y que tapan lo
+                        que sí importa, que es el texto. Se enseña al empezar y
+                        cuando hubo una pausa de verdad. */}
+                    {huboPausa(conversation.messages, j) && (
+                      <span className="px-1 text-[10px] text-muted-foreground">
+                        {hora(m.createdAt)}
+                      </span>
+                    )}
                   </div>
                 ))}
 
@@ -487,6 +494,14 @@ function ClientThread({
       )}
     </Modal>
   )
+}
+
+/** ¿Merece la pena poner la hora en este mensaje? */
+function huboPausa(messages: Message[], i: number): boolean {
+  if (i === 0) return true
+  const anterior = new Date(messages[i - 1].createdAt).getTime()
+  const actual = new Date(messages[i].createdAt).getTime()
+  return actual - anterior > 5 * 60 * 1000
 }
 
 function Avatar({
