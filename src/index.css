@@ -179,6 +179,36 @@
     font-variant-numeric: tabular-nums;
   }
 
+  /*
+    La manita al pasar por encima, en todo lo que se pulsa.
+
+    Tailwind v4 quito el `cursor: pointer` de los botones en su capa base: por
+    eso "Iniciar sesion" —que es un enlace— la tenia y los botones no, y el
+    sitio se sentia inconsistente sin que se supiera por que. Se devuelve aqui,
+    en un solo sitio, para todo lo que responde a un clic: botones, disparadores
+    de menu y de desplegable, opciones de lista, resumenes plegables y etiquetas
+    que activan un control.
+
+    Deshabilitado no: ahi la manita seria una promesa falsa.
+  */
+  button:not(:disabled),
+  summary,
+  select:not(:disabled),
+  label:has(input:not(:disabled)),
+  [role='button']:not([aria-disabled='true']),
+  [role='option'],
+  [role='menuitem'],
+  [role='tab'],
+  a[href] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  [aria-disabled='true'] {
+    cursor: default;
+  }
+
   :focus-visible {
     @apply outline-ring outline-2 outline-offset-2;
   }
