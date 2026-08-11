@@ -55,6 +55,7 @@ interface FormState {
   videoUrl: string;
   tourUrl: string;
   observations: string;
+  observationsEn: string;
   familyId: string;
   unitType: string;
   featureIds: number[];
@@ -90,6 +91,7 @@ const BLANK: FormState = {
   videoUrl: '',
   tourUrl: '',
   observations: '',
+  observationsEn: '',
   familyId: '',
   unitType: '',
   featureIds: [],
@@ -166,6 +168,7 @@ export function PropertyForm() {
       videoUrl: property.videoUrl ?? '',
       tourUrl: property.tourUrl ?? '',
       observations: property.observations ?? '',
+      observationsEn: property.observationsEn ?? '',
       familyId: property.familyId ?? '',
       unitType: property.unitType ?? '',
       featureIds: property.features?.map((feature) => feature.id) ?? [],
@@ -220,6 +223,10 @@ export function PropertyForm() {
       videoUrl: textOrUndefined(form.videoUrl),
       tourUrl: textOrUndefined(form.tourUrl),
       observations: textOrUndefined(form.observations),
+      // Aqui va la cadena aunque este vacia: borrar el texto en el formulario
+      // tiene que borrarlo tambien en la ficha, y con `undefined` el PATCH lo
+      // dejaria como estaba.
+      observationsEn: form.observationsEn.trim(),
       featureIds: form.featureIds,
     };
 
@@ -557,6 +564,14 @@ export function PropertyForm() {
               value={form.observations}
               onChange={(e) => set('observations', e.target.value)}
               placeholder="Lo que un comprador necesita saber y no se ve en las fotos."
+            />
+
+            <TextareaField
+              label="Descripción en inglés"
+              value={form.observationsEn}
+              onChange={(e) => set('observationsEn', e.target.value)}
+              placeholder="The same description, written for an English-speaking buyer."
+              hint="Si se deja vacía, la web en inglés no enseña la descripción del asesor: solo la automática, que ya sale traducida."
             />
           </div>
         </Card>

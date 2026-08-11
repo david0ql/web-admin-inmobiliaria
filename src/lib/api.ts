@@ -502,6 +502,8 @@ export interface Property {
   condition: PropertyCondition | null;
   buildingYear: number | null;
   observations: string | null;
+  /** La descripción del asesor en inglés; la web pública la usa en /en. */
+  observationsEn: string | null;
   availability: Availability;
   publicationStatus: PublicationStatus;
   label: PropertyLabel | null;

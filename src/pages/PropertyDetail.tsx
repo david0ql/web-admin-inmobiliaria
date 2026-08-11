@@ -257,6 +257,12 @@ export function PropertyDetail() {
               </Card>
             )}
 
+            {property.observationsEn && (
+              <Card title="Descripción en inglés">
+                <p className="text-sm whitespace-pre-wrap">{property.observationsEn}</p>
+              </Card>
+            )}
+
             {property.features && property.features.length > 0 && (
               <Card title={`Características · ${property.features.length}`}>
                 <div className="flex flex-wrap gap-1.5">
