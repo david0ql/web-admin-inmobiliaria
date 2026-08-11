@@ -2,6 +2,7 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
 import {
   BarChart3,
+  Languages,
   Building2,
   CalendarClock,
   LayoutTemplate,
@@ -63,6 +64,7 @@ const MANAGE: NavItem[] = [
   { to: '/portada', label: 'Portada', icon: <LayoutTemplate /> },
   { to: '/conversaciones', label: 'Conversaciones', icon: <MessageSquare /> },
   { to: '/asistente', label: 'Asistente', icon: <Sparkles /> },
+  { to: '/textos', label: 'Textos', icon: <Languages /> },
 ];
 
 /*
