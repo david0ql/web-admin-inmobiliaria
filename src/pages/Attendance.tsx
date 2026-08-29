@@ -19,6 +19,7 @@ import {
   dayLabel,
   duration,
   longDateTime,
+  LOOSE_ACCURACY_M,
   type AttendanceDay,
   type AttendanceMark,
   type MyHistory,
@@ -29,9 +30,6 @@ import { useGeolocation } from '../components/attendance/useGeolocation';
 
 /** Dos semanas hacia atras: lo que cabe mirar sin filtros ni paginacion. */
 const HISTORY_DAYS = 14;
-
-/** Por encima de esto el punto puede caer a un par de manzanas de distancia. */
-const POOR_ACCURACY_M = 100;
 
 /**
  * Mi asistencia: la pantalla que abre el equipo a las ocho de la mañana.
@@ -176,7 +174,7 @@ export function Attendance() {
                   doscientos metros, quien marco tiene que saber por que. */}
               {!geo.failure &&
                 geo.fix?.accuracy != null &&
-                geo.fix.accuracy > POOR_ACCURACY_M && (
+                geo.fix.accuracy > LOOSE_ACCURACY_M && (
                   <Alert tone="warn" className="mt-4">
                     Tu ubicación llegó con una precisión de ±{Math.round(geo.fix.accuracy)} m,
                     así que el punto guardado puede quedar a esa distancia. Suele pasar bajo
@@ -346,7 +344,7 @@ function MarkRow({ mark }: { mark: AttendanceMark }) {
         </span>
         <span className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-muted-foreground">
           {mark.address && <span className="min-w-0 truncate">{mark.address}</span>}
-          {mark.accuracyM != null && mark.accuracyM > POOR_ACCURACY_M && (
+          {mark.accuracyM != null && mark.accuracyM > LOOSE_ACCURACY_M && (
             <span className="inline-flex items-center gap-1">
               <Crosshair className="size-3" aria-hidden />±{mark.accuracyM} m
             </span>

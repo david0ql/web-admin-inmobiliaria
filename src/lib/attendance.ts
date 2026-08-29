@@ -286,12 +286,18 @@ export function sessionKey(session: TeamSession): string {
 /**
  * A partir de cuantos metros de incertidumbre la marca deja de situar a nadie.
  *
- * 80 m es, mas o menos, una manzana de Bucaramanga: por debajo se distingue una
- * oficina de la de al lado y por encima ya no. El numero no es sagrado, pero el
+ * Es UN solo umbral para las dos pantallas —la de fichar y la de la historia—
+ * y no puede haber dos: si al fichar se avisa a partir de 100 y en el historial
+ * se marca dudoso a partir de 80, alguien ficha sin ver ningun aviso y luego
+ * aparece señalado sin explicacion posible.
+ *
+ * 100 m y no menos porque el umbral no debe saltar en el uso normal: fichar
+ * bajo techo con posicion por red da decenas de metros de error a diario, y un
+ * aviso que sale siempre no informa de nada. El numero no es sagrado, pero el
  * criterio si: se avisa cuando el dato deja de sostener la conclusion que
  * alguien va a sacar de el.
  */
-export const LOOSE_ACCURACY_M = 80
+export const LOOSE_ACCURACY_M = 100
 
 export function looseAccuracy(mark: TeamMark | null | undefined): boolean {
   return !!mark && mark.accuracyM !== null && mark.accuracyM > LOOSE_ACCURACY_M
