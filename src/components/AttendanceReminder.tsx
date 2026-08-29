@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Clock, X } from 'lucide-react';
-import { api } from '../lib/api';
+import { attendance, bogotaToday } from '../lib/attendance';
 import { useAuth } from '../lib/auth';
 import { Button, Modal } from './ui';
 
@@ -22,6 +22,9 @@ import { Button, Modal } from './ui';
  *      no"; si desapareciera del todo, el olvido —que es el problema que
  *      veniamos a resolver— volveria intacto a las diez de la mañana.
  *
+ * El estado se pide con `attendance.today()` de `lib/attendance.ts`, que es el
+ * contrato compartido del area: no se duplica ni la ruta ni los tipos.
+ *
  * Lo que NUNCA decide el navegador es si ya marco: eso sale siempre de la API.
  * Con una marca local, quien ficha desde el movil seguiria viendo el aviso en
  * el portatil, y quien borra los datos del navegador lo veria dos veces. La
@@ -34,11 +37,6 @@ const VISTO_KEY = 'serrano.asistencia.aviso';
 /** Cada cuanto se vuelve a preguntar por el estado, como mucho. */
 const REFRESCO_MS = 60_000;
 
-/** Hoy en Bogota. La jornada es GMT-5, no la zona del portatil ni UTC. */
-function hoyEnBogota(): string {
-  return new Date().toLocaleDateString('en-CA', { timeZone: 'America/Bogota' });
-}
-
 /**
  * El dia en que cada persona ya vio el aviso, por si el portatil es de la
  * oficina y lo usan dos. Se guarda por usuario y se limpia solo: lo de ayer no
@@ -48,7 +46,7 @@ function avisoVisto(userId: string): boolean {
   try {
     const raw = localStorage.getItem(VISTO_KEY);
     const dias = raw ? (JSON.parse(raw) as Record<string, string>) : {};
-    return dias[userId] === hoyEnBogota();
+    return dias[userId] === bogotaToday();
   } catch {
     return false;
   }
@@ -58,17 +56,10 @@ function marcarAvisoVisto(userId: string): void {
   try {
     // Se reescribe solo con lo de hoy: asi la clave no crece con un dia por
     // cada persona que haya pasado por este navegador.
-    localStorage.setItem(VISTO_KEY, JSON.stringify({ [userId]: hoyEnBogota() }));
+    localStorage.setItem(VISTO_KEY, JSON.stringify({ [userId]: bogotaToday() }));
   } catch {
     // Navegacion privada. Como mucho, el aviso sale otra vez: molesto, no roto.
   }
-}
-
-/** Lo unico que este aviso necesita de `GET /attendance/today`. */
-interface EstadoHoy {
-  /** Si esta dentro ahora mismo, aunque la entrada fuera de ayer noche. */
-  working: boolean;
-  marks: { type: 'IN' | 'OUT' }[];
 }
 
 export function AttendanceReminder() {
@@ -94,7 +85,7 @@ export function AttendanceReminder() {
   const consultar = useCallback(async () => {
     if (!user) return;
     try {
-      const estado = await api.get<EstadoHoy>('/attendance/today');
+      const estado = await attendance.today();
 
       /*
         "Le falta marcar" no es "hoy no tiene marcas": quien entro anoche a las
@@ -103,6 +94,7 @@ export function AttendanceReminder() {
       */
       const falta =
         !estado.working && !estado.marks.some((m) => m.type === 'IN');
+
 
       setPendiente(falta);
       if (falta && !avisoVisto(user.id)) {
