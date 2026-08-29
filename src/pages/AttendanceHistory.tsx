@@ -379,13 +379,19 @@ export function AttendanceHistory() {
                                 dia={fila.date}
                               />
                             ) : (
-                              // Una salida sin su entrada no es un error de la
-                              // persona: la entrada quedo fuera del rango. Se
-                              // dice, en vez de dejar la celda muda.
+                              /*
+                                Una salida sin su entrada. Se dice, en vez de
+                                dejar la celda muda — pero sin explicar por que:
+                                puede ser que la entrada quede fuera del rango
+                                consultado o que no exista ninguna, y la
+                                respuesta no distingue los dos casos. Escribir
+                                "entro antes del rango" seria dar por buena una
+                                de las dos explicaciones sin tener el dato.
+                              */
                               <span className="flex flex-col gap-1">
                                 <Badge tone="amber">Sin entrada</Badge>
-                                <span className="note">
-                                  entró antes del rango consultado
+                                <span className="note normal-case">
+                                  no hay entrada con la que emparejarla
                                 </span>
                               </span>
                             )}
