@@ -41,7 +41,10 @@ import { area, moneyShort, number } from '../lib/format';
 const AUTO_NOTA =
   'Las marcadas como automáticas las pone el sistema agrupando por tramo de área, ' +
   'y por eso no se editan a mano: son de suelo —lotes, terrenos y fincas—, donde ' +
-  'no hay dos iguales y escribirlas a mano sería una tipología por inmueble.';
+  'no hay dos iguales y escribirlas a mano sería una tipología por inmueble. ' +
+  'Se crean, se recolocan y se borran solas según el área de los inmuebles: si ' +
+  'quieres mandar tú sobre uno, asígnale desde su ficha una tipología escrita a ' +
+  'mano y ésa ya no se mueve.';
 
 export function UnitTypesCard({
   familyId,
@@ -611,6 +614,10 @@ export function UnitTypeSelect({
 
   const opciones = unitTypes.data ?? [];
   const vacio = Boolean(familyId) && !unitTypes.loading && opciones.length === 0;
+  // Que la puesta sea automatica cambia lo que hay que contarle a quien mira:
+  // no es una eleccion suya, y va a moverse sola si cambia el area.
+  const automatica =
+    opciones.find((unit) => unit.id === value)?.kind === 'AUTO';
 
   return (
     <SelectField
@@ -624,7 +631,9 @@ export function UnitTypeSelect({
           ? 'El inmueble no está en ningún proyecto: elige uno y aquí saldrán sus tipologías'
           : vacio
             ? 'Este proyecto todavía no tiene tipologías: créalas en su ficha'
-            : 'Solo las tipologías de este proyecto'
+            : automatica
+              ? 'Esta se la puso el sistema por su área y volverá a moverse si el área cambia. Elige una escrita a mano si quieres que se quede donde tú digas.'
+              : 'Solo las tipologías de este proyecto'
       }
     >
       <option value="">Sin tipología</option>
