@@ -399,16 +399,67 @@ export interface PropertyFamily {
   createdAt: string;
 }
 
+/**
+ * Quien decide la tipologia. `FIXED` la escribe la agencia —«Tipo A, 2 alcobas,
+ * 58 m²»—; `AUTO` la pone el sistema por tramo de area, y es para suelo: en
+ * lotes, terrenos y fincas no hay dos iguales, asi que agrupar a mano seria
+ * escribir una tipologia por inmueble.
+ */
+export type UnitTypeKind = 'FIXED' | 'AUTO';
+
+/**
+ * Una tipologia tal cual esta guardada, sin agregados.
+ *
+ * Los tres campos de area llegan como cadena y no como numero: en la base son
+ * `numeric`, y el driver los da asi para no perder decimales por el camino.
+ */
+export interface UnitType {
+  id: string;
+  familyId: string;
+  code: string;
+  name: string;
+  description: string | null;
+  kind: UnitTypeKind;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  garages: number | null;
+  areaMin: string | null;
+  areaMax: string | null;
+  builtArea: string | null;
+  position: number;
+}
+
+/**
+ * Una tipologia con lo que se sabe de sus unidades: lo que escribio la agencia
+ * y lo que sale de contar sus inmuebles, juntos porque se pintan en la misma
+ * fila.
+ *
+ * `id` es null en una sola fila, la de las unidades del proyecto que aun no
+ * tienen tipologia. Esa fila no se edita ni se borra: no es una tipologia, es
+ * el recuento de lo que falta por clasificar.
+ */
 export interface UnitTypeSummary {
+  id: string | null;
+  code: string | null;
+  name: string;
+  description: string | null;
+  kind: UnitTypeKind | null;
+  /** El nombre otra vez, que es lo que la web publica lleva pintando. */
   unitType: string | null;
-  propertyType: string;
-  units: number;
-  available: number;
+  propertyType: string | null;
+  bedrooms: number | null;
+  bathrooms: number | null;
+  garages: number | null;
+  builtArea: number | null;
   minArea: number | null;
   maxArea: number | null;
-  bedrooms: number | null;
+  units: number;
+  available: number;
   minPrice: number | null;
   maxPrice: number | null;
+  position: number;
+  propertyId: string | null;
+  coverUrl: string | null;
 }
 
 export type ConsignmentStatus =
@@ -593,7 +644,9 @@ export interface Property {
   assignedAgentId: string | null;
   family: PropertyFamily | null;
   familyId: string | null;
-  unitType: string | null;
+  /** La tipologia del proyecto a la que pertenece, ya resuelta por la API. */
+  unitType: UnitType | null;
+  unitTypeId: string | null;
   images: PropertyImage[];
   features?: Feature[];
   createdAt: string;

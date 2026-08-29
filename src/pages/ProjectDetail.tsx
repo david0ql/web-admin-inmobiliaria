@@ -33,6 +33,7 @@ import {
 import { AVAILABILITY_LABEL, area, money, moneyShort, number } from '../lib/format';
 import { FAMILY_KIND_LABEL, FAMILY_STATUS_LABEL, ProjectForm } from './Projects';
 import { AVAILABILITY_TONE } from './Properties';
+import { UnitTypeSelect, UnitTypesCard } from './UnitTypes';
 
 interface Detail {
   family: PropertyFamily;
@@ -74,6 +75,10 @@ export function ProjectDetail() {
   const editable = can('ADMIN', 'MANAGER');
   const available = unitTypes.reduce((sum, unit) => sum + unit.available, 0);
   const prices = unitTypes.map((u) => u.minPrice).filter((p): p is number => p !== null);
+  // La fila sin `id` es el recuento de lo que falta por clasificar, no una
+  // tipologia: contarla diria que el proyecto tiene una tipologia mas de las
+  // que la agencia ha escrito.
+  const tipologias = unitTypes.filter((unit) => unit.id !== null);
 
   async function remove() {
     if (!confirm(`¿Borrar el proyecto "${family.name}"? Los inmuebles no se borran.`)) return;
@@ -120,8 +125,8 @@ export function ProjectDetail() {
           />
           <Stat
             label="Tipologías"
-            value={number(unitTypes.length)}
-            note={unitTypes.length ? 'formas distintas' : 'sin clasificar'}
+            value={number(tipologias.length)}
+            note={tipologias.length ? 'en la tabla del proyecto' : 'ninguna escrita todavía'}
           />
           <Stat
             label="Desde"
@@ -135,7 +140,7 @@ export function ProjectDetail() {
           />
         </div>
 
-        <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.6fr)]">
+        <div className="grid gap-5 lg:grid-cols-[minmax(0,320px)_minmax(0,1fr)]">
           <Card title="Ficha">
             <dl className="grid">
                   <Row label="Dirección web" value={`/${family.slug}`} />
@@ -156,61 +161,12 @@ export function ProjectDetail() {
             )}
           </Card>
 
-          <Card
-            title="Tipologías"
-            action={
-              <span className="note">Lo que ve el comprador al abrir el proyecto</span>
-            }
-            flush
-          >
-            {unitTypes.length === 0 ? (
-              <div className="p-5">
-                <Empty title="Sin unidades asignadas">
-                  Asigna inmuebles al proyecto y aquí aparecerán agrupados por forma, con su
-                  rango de área y precio.
-                </Empty>
-              </div>
-            ) : (
-              <Table>
-                  <THead>
-                    <tr>
-                      <Th>Tipología</Th>
-                      <Th>Tipo</Th>
-                      <Th num>Alcobas</Th>
-                      <Th num>Área</Th>
-                      <Th num>Desde</Th>
-                      <Th num>Disponibles</Th>
-                    </tr>
-                  </THead>
-                  <TBody>
-                    {unitTypes.map((unit, index) => (
-                      <Tr key={`${unit.unitType}-${unit.propertyType}-${index}`}>
-                        <Td>
-                          <strong className="font-medium">
-                            {unit.unitType ?? 'Sin clasificar'}
-                          </strong>
-                        </Td>
-                        <Td>{unit.propertyType}</Td>
-                        <Td num>{unit.bedrooms ?? '—'}</Td>
-                        <Td num>
-                          {unit.minArea === unit.maxArea
-                            ? area(unit.minArea)
-                            : `${number(unit.minArea)}–${area(unit.maxArea)}`}
-                        </Td>
-                        <Td num>{moneyShort(unit.minPrice)}</Td>
-                        <Td num>
-                          {unit.available === 0 ? (
-                            <Badge tone="neutral">agotada</Badge>
-                          ) : (
-                            `${unit.available}/${unit.units}`
-                          )}
-                        </Td>
-                      </Tr>
-                    ))}
-                  </TBody>
-              </Table>
-            )}
-          </Card>
+          <UnitTypesCard
+            familyId={id}
+            summaries={unitTypes}
+            editable={editable}
+            onChange={reload}
+          />
         </div>
 
         <Card title={`Unidades · ${properties.length}`} flush>
@@ -255,7 +211,11 @@ export function ProjectDetail() {
                         </Link>
                       </Td>
                       <Td className="max-w-[300px]">{property.title}</Td>
-                      <Td>{property.unitType ?? <span className="note">sin clasificar</span>}</Td>
+                      <Td>
+                        {property.unitType?.name ?? (
+                          <span className="note">sin clasificar</span>
+                        )}
+                      </Td>
                       <Td num>{area(property.area)}</Td>
                       <Td num hideSm>
                         {property.bedrooms ?? '—'}
@@ -341,7 +301,7 @@ function AssignUnitsModal({
   onDone: () => void;
 }) {
   const [query, setQuery] = useState('');
-  const [unitType, setUnitType] = useState('');
+  const [unitTypeId, setUnitTypeId] = useState('');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -371,10 +331,15 @@ function AssignUnitsModal({
     setError(null);
     try {
       for (const propertyId of selected) {
-        await api.patch(`/properties/${propertyId}/family`, {
-          familyId,
-          unitType: unitType.trim() || undefined,
-        });
+        /*
+          Dos peticiones y en este orden: vincular al proyecto deja al inmueble
+          sin tipologia —la que tuviera era de su proyecto anterior— y la API
+          solo acepta una tipologia que sea del proyecto al que YA pertenece.
+        */
+        await api.patch(`/properties/${propertyId}/family`, { familyId });
+        if (unitTypeId) {
+          await api.patch(`/properties/${propertyId}`, { unitTypeId });
+        }
       }
       onDone();
     } catch (err) {
@@ -415,12 +380,11 @@ function AssignUnitsModal({
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Código, título o dirección"
           />
-          <Field
-            label="Tipología"
-            value={unitType}
-            onChange={(e) => setUnitType(e.target.value)}
-            placeholder="Tipo A"
-            hint="Se aplica a todos los seleccionados"
+          <UnitTypeSelect
+            familyId={familyId}
+            value={unitTypeId}
+            onChange={setUnitTypeId}
+            label="Tipología para todos"
           />
         </div>
 

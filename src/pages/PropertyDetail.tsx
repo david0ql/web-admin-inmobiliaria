@@ -44,6 +44,7 @@ import {
   number,
 } from '../lib/format';
 import { AVAILABILITY_TONE } from './Properties';
+import { UnitTypeSelect } from './UnitTypes';
 
 interface Detail {
   property: Property;
@@ -339,7 +340,7 @@ export function PropertyDetail() {
                       label="Proyecto"
                       value={
                         property.family
-                          ? `${property.family.name}${property.unitType ? ` · ${property.unitType}` : ''}`
+                          ? `${property.family.name}${property.unitType ? ` · ${property.unitType.name}` : ''}`
                           : 'Suelto'
                       }
                     />
@@ -433,7 +434,7 @@ export function PropertyDetail() {
                               </Link>
                             </Td>
                             <Td>
-                              {sibling.unitType ?? sibling.propertyType.name}
+                              {sibling.unitType?.name ?? sibling.propertyType.name}
                               <div className="note mt-0.5">
                                 {sibling.bedrooms ?? '—'} alcobas · piso {sibling.floor ?? '—'}
                               </div>
@@ -504,7 +505,7 @@ export function PropertyDetail() {
         <FamilyModal
           propertyId={id}
           currentFamilyId={property.familyId}
-          currentUnitType={property.unitType}
+          currentUnitTypeId={property.unitTypeId}
           onClose={() => setLinkingFamily(false)}
           onDone={() => {
             setLinkingFamily(false);
@@ -715,13 +716,13 @@ function PublishModal({
 function FamilyModal({
   propertyId,
   currentFamilyId,
-  currentUnitType,
+  currentUnitTypeId,
   onClose,
   onDone,
 }: {
   propertyId: string;
   currentFamilyId: string | null;
-  currentUnitType: string | null;
+  currentUnitTypeId: string | null;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -730,7 +731,7 @@ function FamilyModal({
     [],
   );
   const [familyId, setFamilyId] = useState(currentFamilyId ?? '');
-  const [unitType, setUnitType] = useState(currentUnitType ?? '');
+  const [unitTypeId, setUnitTypeId] = useState(currentUnitTypeId ?? '');
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
 
@@ -738,10 +739,23 @@ function FamilyModal({
     setBusy(true);
     setError(null);
     try {
-      await api.patch(`/properties/${propertyId}/family`, {
-        familyId: familyId || null,
-        unitType: unitType.trim() || undefined,
-      });
+      /*
+        Primero el proyecto y luego la tipologia, nunca al reves: vincular a
+        otro proyecto deja al inmueble sin tipologia —la que tenia era del
+        anterior— y la API solo acepta una que sea del proyecto al que ya
+        pertenece.
+      */
+      const familyChanged = familyId !== (currentFamilyId ?? '');
+      if (familyChanged) {
+        await api.patch(`/properties/${propertyId}/family`, {
+          familyId: familyId || null,
+        });
+      }
+      if (familyChanged || unitTypeId !== (currentUnitTypeId ?? '')) {
+        await api.patch(`/properties/${propertyId}`, {
+          unitTypeId: unitTypeId || null,
+        });
+      }
       onDone();
     } catch (err) {
       setError(err instanceof ApiError ? err.message : 'No se pudo asignar el proyecto.');
@@ -771,7 +785,12 @@ function FamilyModal({
         <SelectField
           label="Proyecto"
           value={familyId}
-          onChange={(e) => setFamilyId(e.target.value)}
+          // Cambiar de proyecto invalida la tipologia elegida: la de un edificio
+          // no existe en el de al lado.
+          onChange={(e) => {
+            setFamilyId(e.target.value);
+            setUnitTypeId('');
+          }}
           hint="Déjalo sin proyecto si es un inmueble suelto"
         >
           <option value="">Sin proyecto</option>
@@ -783,13 +802,10 @@ function FamilyModal({
           ))}
         </SelectField>
 
-        <Field
-          label="Tipología"
-          value={unitType}
-          onChange={(e) => setUnitType(e.target.value)}
-          placeholder="Tipo A"
-          disabled={!familyId}
-          hint="Agrupa las unidades iguales dentro del proyecto."
+        <UnitTypeSelect
+          familyId={familyId}
+          value={unitTypeId}
+          onChange={setUnitTypeId}
         />
 
         {(families.data ?? []).length === 0 && (

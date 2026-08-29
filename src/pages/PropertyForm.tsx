@@ -24,6 +24,7 @@ import {
   TextareaField,
 } from '../components/ui';
 import { AVAILABILITY_LABEL, CONDITION_LABEL, PUBLICATION_LABEL } from '../lib/format';
+import { UnitTypeSelect } from './UnitTypes';
 
 interface FormState {
   title: string;
@@ -57,7 +58,7 @@ interface FormState {
   observations: string;
   observationsEn: string;
   familyId: string;
-  unitType: string;
+  unitTypeId: string;
   featureIds: number[];
 }
 
@@ -93,7 +94,7 @@ const BLANK: FormState = {
   observations: '',
   observationsEn: '',
   familyId: '',
-  unitType: '',
+  unitTypeId: '',
   featureIds: [],
 };
 
@@ -170,7 +171,7 @@ export function PropertyForm() {
       observations: property.observations ?? '',
       observationsEn: property.observationsEn ?? '',
       familyId: property.familyId ?? '',
-      unitType: property.unitType ?? '',
+      unitTypeId: property.unitTypeId ?? '',
       featureIds: property.features?.map((feature) => feature.id) ?? [],
     });
   }, [existing.data]);
@@ -237,13 +238,24 @@ export function PropertyForm() {
 
       // El proyecto va por su propio endpoint: asignarlo deja rastro y valida
       // la jerarquia, cosas que no pintan en el alta general del inmueble.
-      const familyChanged =
-        form.familyId !== (existing.data?.familyId ?? '') ||
-        form.unitType !== (existing.data?.unitType ?? '');
+      const familyChanged = form.familyId !== (existing.data?.familyId ?? '');
       if (familyChanged) {
         await api.patch(`/properties/${saved.id}/family`, {
           familyId: form.familyId || null,
-          unitType: textOrUndefined(form.unitType),
+        });
+      }
+
+      /*
+        La tipologia va DESPUES y en su propia peticion: cambiar de proyecto
+        deja al inmueble sin tipologia —la que tuviera era del proyecto
+        anterior—, asi que mandarla antes o en el mismo paso la perderia. Y la
+        API solo acepta una que sea del proyecto al que el inmueble ya
+        pertenece.
+      */
+      const unitTypeChanged = form.unitTypeId !== (existing.data?.unitTypeId ?? '');
+      if (familyChanged || unitTypeChanged) {
+        await api.patch(`/properties/${saved.id}`, {
+          unitTypeId: form.unitTypeId || null,
         });
       }
 
@@ -588,7 +600,15 @@ export function PropertyForm() {
             <SelectField
               label="Conjunto o proyecto"
               value={form.familyId}
-              onChange={(e) => set('familyId', e.target.value)}
+              // Cambiar de proyecto invalida la tipologia elegida: la del Tipo A
+              // de un edificio no existe en el de al lado, y la API lo rechaza.
+              onChange={(e) =>
+                setForm((prev) => ({
+                  ...prev,
+                  familyId: e.target.value,
+                  unitTypeId: '',
+                }))
+              }
               hint={
                 (families.data ?? []).length === 0
                   ? 'Todavía no hay proyectos: créalos en Proyectos'
@@ -603,13 +623,10 @@ export function PropertyForm() {
                 </option>
               ))}
             </SelectField>
-            <Field
-              label="Tipología"
-              value={form.unitType}
-              onChange={(e) => set('unitType', e.target.value)}
-              placeholder="Tipo A"
-              disabled={!form.familyId}
-              hint="Agrupa las unidades iguales del proyecto"
+            <UnitTypeSelect
+              familyId={form.familyId}
+              value={form.unitTypeId}
+              onChange={(value) => set('unitTypeId', value)}
             />
           </div>
         </Card>
