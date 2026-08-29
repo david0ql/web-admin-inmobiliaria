@@ -26,8 +26,10 @@ import { Translations } from '@/pages/Translations';
 import { HomeShowcase } from './pages/HomeShowcase'
 import { Team } from './pages/Team';
 import { Branches } from './pages/Branches';
-import { Attendance } from './pages/Attendance';
+import { Profile } from './pages/Profile';
+import { AttendanceReminder } from './components/AttendanceReminder';
 import { AttendanceHistory } from './pages/AttendanceHistory';
+import { Attendance } from './pages/Attendance';
 
 /**
  * Puerta de entrada al panel.
@@ -48,7 +50,19 @@ function Protected() {
   }
   if (!user) return <Navigate to="/acceso" replace />;
   if (user.mustSetPassword) return <Navigate to="/clave" replace />;
-  return <Shell />;
+  /*
+    El recordatorio de asistencia se monta aqui y no dentro del Shell: tiene
+    que sobrevivir a la navegacion —el Outlet se desmonta en cada cambio de
+    pantalla— y no pertenece a ninguna pagina. Va despues de la clave inicial a
+    proposito: a quien todavia no ha elegido contrasena la API no le deja hacer
+    nada, y recordarle que fiche seria mandarle a una puerta cerrada.
+  */
+  return (
+    <>
+      <AttendanceReminder />
+      <Shell />
+    </>
+  );
 }
 
 export default function App() {
@@ -80,6 +94,7 @@ export default function App() {
               <Route path="informes" element={<Reports />} />
               <Route path="asistencia" element={<Attendance />} />
               <Route path="equipo" element={<Team />} />
+              <Route path="mi-cuenta" element={<Profile />} />
               <Route path="asistencia/historial" element={<AttendanceHistory />} />
               <Route path="sedes" element={<Branches />} />
               <Route path="agenda-config" element={<BookingSettings />} />
