@@ -13,6 +13,7 @@ import {
   Globe,
   Home,
   Inbox,
+  Landmark,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -22,6 +23,8 @@ import {
   X,
 } from 'lucide-react';
 import { useAuth } from '../lib/auth';
+import { useBranch } from '../lib/branch';
+import type { Role } from '../lib/api';
 import { ROLE_LABEL } from '../lib/format';
 import { Avatar, Button, Sheet, SheetContent, SheetTitle } from './ui';
 import { cn } from '../lib/utils';
@@ -41,6 +44,8 @@ interface NavItem {
   label: string;
   icon: ReactNode;
   end?: boolean;
+  /** Si se indica, el enlace solo existe para esos perfiles. */
+  roles?: Role[];
 }
 
 const MAIN: NavItem[] = [
@@ -60,6 +65,9 @@ const MANAGE: NavItem[] = [
   // A proposito distinto de `Users`: equipo y clientes tienen que leerse
   // aparte de un vistazo.
   { to: '/equipo', label: 'Equipo', icon: <UserCog /> },
+  // Abrir y cerrar oficinas es decision de la empresa, no de una oficina: el
+  // enlace no existe para nadie mas que el administrador.
+  { to: '/sedes', label: 'Sedes', icon: <Landmark />, roles: ['ADMIN'] },
   { to: '/agenda-config', label: 'Horarios', icon: <CalendarClock /> },
   { to: '/portada', label: 'Portada', icon: <LayoutTemplate /> },
   { to: '/conversaciones', label: 'Conversaciones', icon: <MessageSquare /> },
@@ -80,8 +88,61 @@ const RAIL_LINK = cn(
   '[&_svg]:size-4 [&_svg]:shrink-0',
 );
 
+/**
+ * El selector de sede, justo bajo la marca.
+ *
+ * Solo se pinta cuando hay algo que elegir. Quien pertenece a una oficina no
+ * elige —la API le impone la suya y la cabecera ni se mira—, pero si lee cual
+ * es: sin eso, dos coordinadores con el mismo panel delante no sabrian por que
+ * ven inventarios distintos.
+ */
+function BranchPicker() {
+  const { branches, branchId, current, seesAll, setBranchId } = useBranch();
+
+  if (!seesAll) {
+    if (!current) return null;
+    return (
+      <div className="mx-2.5 mb-3 rounded-md border border-white/10 bg-white/5 px-3 py-2">
+        <span className="micro-label block text-white/40">Sede</span>
+        <strong className="block truncate text-[13px] font-medium text-white">
+          {current.name}
+        </strong>
+      </div>
+    );
+  }
+
+  // Con una sola oficina, "todas" y "la unica" son lo mismo: un desplegable de
+  // dos opciones equivalentes solo hace ruido.
+  if (branches.length < 2) return null;
+
+  return (
+    <label className="mx-2.5 mb-3 block">
+      <span className="micro-label mb-1 block text-white/40">Sede</span>
+      <select
+        value={branchId ?? ''}
+        onChange={(e) => setBranchId(e.target.value || null)}
+        className="h-9 w-full rounded-md border border-white/15 bg-white/10 px-2.5 text-[13px] text-white outline-none transition-colors hover:bg-white/15 focus-visible:border-white/40"
+      >
+        {/* Las opciones se pintan con los colores del sistema, no con los del
+            rail: van en claro a proposito para que se lean al desplegar. */}
+        <option value="" className="bg-white text-black">
+          Todas las sedes
+        </option>
+        {branches.map((branch) => (
+          <option key={branch.id} value={branch.id} className="bg-white text-black">
+            {branch.name}
+            {!branch.active ? ' (inactiva)' : ''}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+}
+
 function RailNav({ onNavigate }: { onNavigate: () => void }) {
   const { user, signOut } = useAuth();
+  const visible = (item: NavItem) =>
+    !item.roles || (user ? item.roles.includes(user.role) : false);
 
   return (
     <>
@@ -95,6 +156,8 @@ function RailNav({ onNavigate }: { onNavigate: () => void }) {
         </strong>
         <span className="note text-white/50">Inmobiliaria</span>
       </NavLink>
+
+      <BranchPicker />
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5">
         {MAIN.map((item) => (
@@ -111,7 +174,7 @@ function RailNav({ onNavigate }: { onNavigate: () => void }) {
         ))}
 
         <div className="micro-label px-3 pt-5 pb-1.5 text-white/40">Gestión</div>
-        {MANAGE.map((item) => (
+        {MANAGE.filter(visible).map((item) => (
           <NavLink
             key={item.to}
             to={item.to}
@@ -153,6 +216,7 @@ function RailNav({ onNavigate }: { onNavigate: () => void }) {
 export function Shell() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
+  const { branchId } = useBranch();
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[var(--spacing-rail)_1fr]">
@@ -181,7 +245,19 @@ export function Shell() {
       </Sheet>
 
       <div className="flex min-w-0 flex-col">
-        <Outlet key={location.pathname} context={{ openRail: () => setOpen(true) }} />
+        {/*
+          La sede entra en la clave del Outlet, no solo la ruta. Cambiarla
+          desmonta y vuelve a montar la pantalla que se este viendo, con lo que
+          todos sus `useFetch` se rehacen ya con la cabecera nueva. Es la forma
+          de refrescar sin recargar la pagina entera —y sin que cada pantalla
+          tenga que acordarse de escuchar el cambio—; el precio es perder los
+          filtros y el scroll de esa pantalla, que es justo lo que se espera al
+          mudarse de oficina.
+        */}
+        <Outlet
+          key={`${location.pathname}:${branchId ?? 'todas'}`}
+          context={{ openRail: () => setOpen(true) }}
+        />
       </div>
     </div>
   );

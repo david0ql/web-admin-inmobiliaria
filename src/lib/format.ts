@@ -153,12 +153,29 @@ export const CONDITION_LABEL: Record<string, string> = {
   UNDER_CONSTRUCTION: 'En construcción',
 };
 
+/*
+ * Los nombres que usa la agencia al hablar. `MANAGER` y `COORDINATOR` caen en
+ * la misma etiqueta a proposito: son el mismo puesto y el primero solo
+ * sobrevive en los usuarios dados de alta antes del cambio de nombre; quien
+ * mira el listado no tiene por que enterarse de esa historia.
+ */
 export const ROLE_LABEL: Record<string, string> = {
   ADMIN: 'Administrador',
-  MANAGER: 'Coordinador',
+  DIRECTOR: 'Director de operaciones',
+  COORDINATOR: 'Coordinador de sede',
+  MANAGER: 'Coordinador de sede',
   AGENT: 'Asesor',
-  VIEWER: 'Consulta',
+  VIEWER: 'Solo lectura',
 };
+
+/** Lo que se puede elegir al dar de alta: sin el alias viejo. */
+export const ASSIGNABLE_ROLES = [
+  'ADMIN',
+  'DIRECTOR',
+  'COORDINATOR',
+  'AGENT',
+  'VIEWER',
+] as const;
 
 export const INTEREST_ROLE_LABEL: Record<string, string> = {
   PROSPECT: 'Interesado',

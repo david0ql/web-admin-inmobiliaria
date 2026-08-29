@@ -1,7 +1,16 @@
 import { useState } from 'react';
-import { ApiError, api, type Agent, type Role, type Shift } from '../lib/api';
+import {
+  ApiError,
+  api,
+  runsBranch,
+  seesAllBranches,
+  type Agent,
+  type Role,
+  type Shift,
+} from '../lib/api';
 import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
+import { useBranch } from '../lib/branch';
 import { PageHeader } from '../components/Shell';
 import {
   Alert,
@@ -25,11 +34,12 @@ import {
   Tr,
 } from '../components/ui';
 import { Input } from '../components/ui/input';
-import { ROLE_LABEL, WEEKDAYS, relative } from '../lib/format';
+import { ASSIGNABLE_ROLES, ROLE_LABEL, WEEKDAYS, relative } from '../lib/format';
 import { cn } from '../lib/utils';
 
 export function Team() {
   const { can, user } = useAuth();
+  const { branches } = useBranch();
   const [includeInactive, setIncludeInactive] = useState(true);
   const [creating, setCreating] = useState(false);
   const [shiftsFor, setShiftsFor] = useState<Agent | null>(null);
@@ -51,8 +61,10 @@ export function Team() {
               checked={includeInactive}
               onChange={(e) => setIncludeInactive(e.target.checked)}
             />
-            {can('ADMIN') && (
-              <Button onClick={() => setCreating(true)}>Nuevo asesor</Button>
+            {/* El coordinador da de alta a los suyos; la API le limita a
+                asesores y consulta, y a su propia sede. */}
+            {can('ADMIN', 'COORDINATOR', 'MANAGER') && (
+              <Button onClick={() => setCreating(true)}>Nuevo usuario</Button>
             )}
           </>
         }
@@ -69,6 +81,7 @@ export function Team() {
                   <tr>
                     <Th>Asesor</Th>
                     <Th>Perfil</Th>
+                    <Th hideSm>Sede</Th>
                     <Th hideSm>Contacto</Th>
                     <Th>Estado</Th>
                     <Th num hideSm>
@@ -102,8 +115,18 @@ export function Team() {
                       </Td>
                       <Td>
                         <Badge tone={agent.role === 'ADMIN' ? 'ink' : 'neutral'}>
-                          {ROLE_LABEL[agent.role]}
+                          {ROLE_LABEL[agent.role] ?? agent.role}
                         </Badge>
+                      </Td>
+                      <Td hideSm>
+                        {/* Sin sede no es un dato que falte: es que manda en
+                            todas, y decirlo asi evita leerlo como un hueco. */}
+                        {agent.branchId ? (
+                          (branches.find((b) => b.id === agent.branchId)?.name ??
+                          '—')
+                        ) : (
+                          <span className="text-muted-foreground">Todas las sedes</span>
+                        )}
                       </Td>
                       <Td hideSm className="tabular">
                         {agent.cellPhone ?? '—'}
@@ -146,22 +169,52 @@ export function Team() {
       )}
 
       {shiftsFor && (
-        <ShiftsModal agent={shiftsFor} onClose={() => setShiftsFor(null)} editable={can('ADMIN', 'MANAGER')} />
+        <ShiftsModal
+          agent={shiftsFor}
+          onClose={() => setShiftsFor(null)}
+          editable={can('ADMIN', 'MANAGER', 'COORDINATOR')}
+        />
       )}
     </>
   );
 }
 
+/**
+ * Alta de usuario.
+ *
+ * Dos cosas que no son cosmeticas: la sede es obligatoria salvo en los dos
+ * perfiles que las ven todas —un asesor sin oficina no tendria inventario que
+ * mirar—, y a quien manda en una sola sede se le da su sede fija y una lista
+ * de perfiles recortada. Lo segundo lo vuelve a comprobar la API: esto es para
+ * que el formulario no ofrezca lo que va a rechazarse, no la barrera.
+ */
 function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () => void }) {
+  const { user } = useAuth();
+  const { branches, branchId } = useBranch();
+  const desdeUnaSede = runsBranch(user?.role);
+
+  const perfiles: Role[] = desdeUnaSede
+    ? ['AGENT', 'VIEWER']
+    : (ASSIGNABLE_ROLES.filter(
+        (role) => role !== 'ADMIN' || user?.role === 'ADMIN',
+      ) as Role[]);
+
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
     email: '',
     cellPhone: '',
     role: 'AGENT' as Role,
+    // Al coordinador se le impone la suya; al administrador se le propone la
+    // que tenga puesta en el selector, que es donde esta trabajando.
+    branchId: desdeUnaSede
+      ? (user?.branchId ?? '')
+      : (branchId ?? (branches.length === 1 ? branches[0].id : '')),
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const pideSede = !seesAllBranches(form.role);
 
   async function save() {
     setBusy(true);
@@ -173,10 +226,11 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
         email: form.email.trim(),
         cellPhone: form.cellPhone.trim() || undefined,
         role: form.role,
+        branchId: pideSede ? form.branchId : undefined,
       });
       onDone();
     } catch (err) {
-      setError(err instanceof ApiError ? err.message : 'No se pudo crear el asesor.');
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear el usuario.');
     } finally {
       setBusy(false);
     }
@@ -184,7 +238,7 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
 
   return (
     <Modal
-      title="Nuevo asesor"
+      title="Nuevo usuario"
       onClose={onClose}
       footer={
         <>
@@ -193,10 +247,14 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
           </Button>
           <Button
             loading={busy}
-            disabled={!form.firstName.trim() || !form.email.trim()}
+            disabled={
+              !form.firstName.trim() ||
+              !form.email.trim() ||
+              (pideSede && !form.branchId)
+            }
             onClick={() => void save()}
           >
-            Crear asesor
+            Crear usuario
           </Button>
         </>
       }
@@ -239,14 +297,44 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
           label="Perfil"
           value={form.role}
           onChange={(e) => setForm({ ...form, role: e.target.value as Role })}
-          hint="Un asesor solo ve su propia cartera"
+          hint={
+            desdeUnaSede
+              ? 'Desde una sede solo se dan de alta asesores y perfiles de solo lectura.'
+              : 'El asesor solo ve su propia cartera; el coordinador, la de toda su sede.'
+          }
         >
-          {Object.entries(ROLE_LABEL).map(([value, label]) => (
-            <option key={value} value={value}>
-              {label}
+          {perfiles.map((role) => (
+            <option key={role} value={role}>
+              {ROLE_LABEL[role]}
             </option>
           ))}
         </SelectField>
+
+        {pideSede ? (
+          <SelectField
+            label="Sede"
+            required
+            value={form.branchId}
+            disabled={desdeUnaSede}
+            onChange={(e) => setForm({ ...form, branchId: e.target.value })}
+            hint={
+              desdeUnaSede
+                ? 'Solo puedes dar de alta en tu propia sede.'
+                : 'De ella cuelgan su inventario y sus clientes.'
+            }
+          >
+            <option value="">Elige una sede</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </SelectField>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            {ROLE_LABEL[form.role]} no pertenece a ninguna sede: las ve todas.
+          </p>
+        )}
       </div>
     </Modal>
   );

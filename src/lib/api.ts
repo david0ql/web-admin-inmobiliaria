@@ -10,6 +10,7 @@
 const BASE = '/api/v1';
 const ACCESS_KEY = 'serrano.access';
 const REFRESH_KEY = 'serrano.refresh';
+const BRANCH_KEY = 'serrano.branch';
 
 export class ApiError extends Error {
   readonly status: number;
@@ -40,8 +41,39 @@ export const tokens = {
   },
 };
 
-/** Se avisa a la app cuando la sesion muere para que vuelva al acceso. */
+/**
+ * La sede sobre la que trabaja el panel.
+ *
+ * Vive aqui y no en un contexto de React porque quien tiene que saberla es
+ * `send`: la cabecera `x-branch` la lleva TODA peticion, y hacerlo llamada por
+ * llamada significaria acordarse en las ciento y pico que hay repartidas.
+ *
+ * `null` es "todas las sedes" y no viaja cabecera. Quien no ve mas que la suya
+ * puede mandar lo que quiera: la API ignora la cabecera y le impone la propia
+ * —esto es comodidad de interfaz, no un permiso—.
+ *
+ * En localStorage para que sobreviva a la recarga: cambiar de oficina no es
+ * algo que se haga por peticion, sino por rato de trabajo.
+ */
 type Listener = () => void;
+const branchListeners = new Set<Listener>();
+
+export const branchScope = {
+  get current(): string | null {
+    return localStorage.getItem(BRANCH_KEY);
+  },
+  set(id: string | null) {
+    if (id) localStorage.setItem(BRANCH_KEY, id);
+    else localStorage.removeItem(BRANCH_KEY);
+    branchListeners.forEach((fn) => fn());
+  },
+  subscribe(fn: Listener) {
+    branchListeners.add(fn);
+    return () => branchListeners.delete(fn);
+  },
+};
+
+/** Se avisa a la app cuando la sesion muere para que vuelva al acceso. */
 const expiredListeners = new Set<Listener>();
 export function onSessionExpired(fn: Listener) {
   expiredListeners.add(fn);
@@ -50,6 +82,9 @@ export function onSessionExpired(fn: Listener) {
 
 function sessionExpired() {
   tokens.clear();
+  // La sede es de quien tenia la sesion: dejarla puesta haria que el siguiente
+  // en entrar por este navegador arrancase mirando la oficina del anterior.
+  branchScope.set(null);
   expiredListeners.forEach((fn) => fn());
 }
 
@@ -114,6 +149,8 @@ async function send<T>(path: string, options: RequestOptions, retry = true): Pro
   if (options.body !== undefined) headers['Content-Type'] = 'application/json';
   const access = tokens.access;
   if (access) headers.Authorization = `Bearer ${access}`;
+  const branch = branchScope.current;
+  if (branch) headers['x-branch'] = branch;
 
   const res = await fetch(`${BASE}${path}${toQuery(options.query)}`, {
     method: options.method ?? 'GET',
@@ -152,9 +189,13 @@ async function send<T>(path: string, options: RequestOptions, retry = true): Pro
  */
 export async function download(path: string, filename: string): Promise<void> {
   const access = tokens.access;
-  const res = await fetch(`${BASE}${path}`, {
-    headers: access ? { Authorization: `Bearer ${access}` } : {},
-  });
+  const headers: Record<string, string> = {};
+  if (access) headers.Authorization = `Bearer ${access}`;
+  // La descarga tambien va con sede puesta: un informe de Bucaramanga no puede
+  // salir con las cifras de las dos oficinas solo por bajarse en PDF.
+  const branch = branchScope.current;
+  if (branch) headers['x-branch'] = branch;
+  const res = await fetch(`${BASE}${path}`, { headers });
   if (!res.ok) {
     throw new ApiError(res.status, 'No se pudo descargar el documento');
   }
@@ -193,7 +234,42 @@ export interface Session {
   };
 }
 
-export type Role = 'ADMIN' | 'MANAGER' | 'AGENT' | 'VIEWER';
+/*
+ * `MANAGER` es el nombre viejo de `COORDINATOR` y sigue vivo en los usuarios
+ * dados de alta antes del cambio, asi que el panel tiene que saber leerlo
+ * aunque no lo ofrezca nunca al crear.
+ */
+export type Role =
+  | 'ADMIN'
+  | 'DIRECTOR'
+  | 'COORDINATOR'
+  | 'MANAGER'
+  | 'AGENT'
+  | 'VIEWER';
+
+/** Los dos roles que abarcan la agencia entera y no cuelgan de una oficina. */
+export const ROLES_ACROSS_BRANCHES: Role[] = ['ADMIN', 'DIRECTOR'];
+
+export function seesAllBranches(role: Role | undefined | null): boolean {
+  return !!role && ROLES_ACROSS_BRANCHES.includes(role);
+}
+
+/** Manda en una sede: da de alta a los suyos y toca su inventario. */
+export function runsBranch(role: Role | undefined | null): boolean {
+  return role === 'COORDINATOR' || role === 'MANAGER';
+}
+
+export interface Branch {
+  id: string;
+  name: string;
+  code: string;
+  cityId: number | null;
+  address: string | null;
+  phone: string | null;
+  isDefault: boolean;
+  active: boolean;
+  createdAt: string;
+}
 
 export interface Me {
   id: string;
@@ -208,6 +284,8 @@ export interface Me {
   hasWhatsapp: boolean;
   mustSetPassword: boolean;
   lastLoginAt: string | null;
+  /** Nula en ADMIN y DIRECTOR: no pertenecen a una oficina, las ven todas. */
+  branchId: string | null;
 }
 
 export interface Page<T> {
@@ -228,6 +306,7 @@ export interface Agent {
   hasWhatsapp: boolean;
   mustSetPassword: boolean;
   lastLoginAt: string | null;
+  branchId: string | null;
 }
 
 export interface Shift {

@@ -7,7 +7,15 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { api, onSessionExpired, tokens, type Me, type Role, type Session } from './api';
+import {
+  api,
+  branchScope,
+  onSessionExpired,
+  tokens,
+  type Me,
+  type Role,
+  type Session,
+} from './api';
 
 interface AuthValue {
   user: Me | null;
@@ -67,6 +75,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         const refresh = tokens.refresh;
         if (refresh) await api.post('/auth/logout', { refreshToken: refresh }).catch(() => {});
         tokens.clear();
+        // Igual que los tokens: la sede elegida se va con la sesion.
+        branchScope.set(null);
         setUser(null);
       },
       async changePassword(currentPassword, newPassword) {

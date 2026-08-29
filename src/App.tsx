@@ -1,6 +1,7 @@
 import { Loader2 } from 'lucide-react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
 import { AuthProvider, useAuth } from './lib/auth';
+import { BranchProvider } from './lib/branch';
 import { Shell } from './components/Shell';
 import { Login } from './pages/Login';
 import { ChangePassword } from './pages/ChangePassword';
@@ -24,6 +25,7 @@ import { AssistantRules } from './pages/AssistantRules'
 import { Translations } from '@/pages/Translations';
 import { HomeShowcase } from './pages/HomeShowcase'
 import { Team } from './pages/Team';
+import { Branches } from './pages/Branches';
 
 /**
  * Puerta de entrada al panel.
@@ -50,38 +52,43 @@ function Protected() {
 export default function App() {
   return (
     <AuthProvider>
-      <BrowserRouter>
-        <Routes>
-          <Route path="/acceso" element={<Login />} />
-          <Route path="/clave" element={<ChangePassword />} />
+      {/* Por dentro de la sesion y por fuera del router: la sede depende de
+          quien eres, y la pantalla que se este viendo depende de la sede. */}
+      <BranchProvider>
+        <BrowserRouter>
+          <Routes>
+            <Route path="/acceso" element={<Login />} />
+            <Route path="/clave" element={<ChangePassword />} />
 
-          <Route element={<Protected />}>
-            <Route index element={<Dashboard />} />
-            <Route path="inmuebles" element={<Properties />} />
-            <Route path="inmuebles/nuevo" element={<PropertyForm />} />
-            <Route path="inmuebles/:id" element={<PropertyDetail />} />
-            <Route path="inmuebles/:id/editar" element={<PropertyForm />} />
-            <Route path="proyectos" element={<Projects />} />
-            <Route path="proyectos/:id" element={<ProjectDetail />} />
-            <Route path="solicitudes" element={<Consignments />} />
-            <Route path="creditos" element={<CreditRequests />} />
-            <Route path="clientes" element={<Clients />} />
-            <Route path="clientes/:id" element={<ClientDetail />} />
-            <Route path="embudo" element={<PipelineBoard />} />
-            <Route path="agenda" element={<Calendar />} />
-            <Route path="portales" element={<Portals />} />
-            <Route path="informes" element={<Reports />} />
-            <Route path="equipo" element={<Team />} />
-            <Route path="agenda-config" element={<BookingSettings />} />
-            <Route path="conversaciones" element={<Conversations />} />
-            <Route path="asistente" element={<AssistantRules />} />
-            <Route path="portada" element={<HomeShowcase />} />
-            <Route path="textos" element={<Translations />} />
-          </Route>
+            <Route element={<Protected />}>
+              <Route index element={<Dashboard />} />
+              <Route path="inmuebles" element={<Properties />} />
+              <Route path="inmuebles/nuevo" element={<PropertyForm />} />
+              <Route path="inmuebles/:id" element={<PropertyDetail />} />
+              <Route path="inmuebles/:id/editar" element={<PropertyForm />} />
+              <Route path="proyectos" element={<Projects />} />
+              <Route path="proyectos/:id" element={<ProjectDetail />} />
+              <Route path="solicitudes" element={<Consignments />} />
+              <Route path="creditos" element={<CreditRequests />} />
+              <Route path="clientes" element={<Clients />} />
+              <Route path="clientes/:id" element={<ClientDetail />} />
+              <Route path="embudo" element={<PipelineBoard />} />
+              <Route path="agenda" element={<Calendar />} />
+              <Route path="portales" element={<Portals />} />
+              <Route path="informes" element={<Reports />} />
+              <Route path="equipo" element={<Team />} />
+              <Route path="sedes" element={<Branches />} />
+              <Route path="agenda-config" element={<BookingSettings />} />
+              <Route path="conversaciones" element={<Conversations />} />
+              <Route path="asistente" element={<AssistantRules />} />
+              <Route path="portada" element={<HomeShowcase />} />
+              <Route path="textos" element={<Translations />} />
+            </Route>
 
-          <Route path="*" element={<Navigate to="/" replace />} />
-        </Routes>
-      </BrowserRouter>
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
+        </BrowserRouter>
+      </BranchProvider>
     </AuthProvider>
   );
 }
