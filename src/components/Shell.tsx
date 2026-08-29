@@ -2,22 +2,14 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
 import {
   BarChart3,
-  Languages,
   Building2,
-  CalendarClock,
-  LayoutTemplate,
-  MessageSquare,
-  Sparkles,
-  CalendarDays,
-  CreditCard,
+  ChevronRight,
+  CircleUser,
   Globe,
   Home,
-  Inbox,
-  Landmark,
-  LayoutDashboard,
   LogOut,
   Menu,
-  SquareKanban,
+  Settings,
   UserCog,
   Users,
   X,
@@ -42,38 +34,143 @@ import { cn } from '../lib/utils';
 interface NavItem {
   to: string;
   label: string;
-  icon: ReactNode;
   end?: boolean;
   /** Si se indica, el enlace solo existe para esos perfiles. */
   roles?: Role[];
 }
 
-const MAIN: NavItem[] = [
-  { to: '/', label: 'Panel', icon: <LayoutDashboard />, end: true },
-  { to: '/inmuebles', label: 'Inmuebles', icon: <Home /> },
-  { to: '/proyectos', label: 'Proyectos', icon: <Building2 /> },
-  { to: '/clientes', label: 'Clientes', icon: <Users /> },
-  { to: '/embudo', label: 'Embudo', icon: <SquareKanban /> },
-  { to: '/agenda', label: 'Agenda', icon: <CalendarDays /> },
+interface NavGroup {
+  /** Clave estable con la que se recuerda si el grupo quedo abierto. */
+  id: string;
+  label: string;
+  icon: ReactNode;
+  children: NavItem[];
+}
+
+type NavEntry = (NavItem & { icon: ReactNode }) | NavGroup;
+
+const isGroup = (entry: NavEntry): entry is NavGroup => 'children' in entry;
+
+/*
+  El arbol esta ordenado y nombrado como el de WASI, que es de donde viene la
+  agencia: un asesor tiene que encontrar cada cosa donde ya la buscaba. Lo que
+  no existe alli —consignaciones, creditos, conversaciones, asistente, textos,
+  sedes— cuelga del grupo de WASI al que pertenece por naturaleza, no de uno
+  nuevo, para no duplicar sitios donde mirar.
+*/
+const MAIN: NavEntry[] = [
+  {
+    id: 'inicio',
+    label: 'Inicio',
+    icon: <Home />,
+    children: [
+      { to: '/', label: 'Panel', end: true },
+      { to: '/agenda', label: 'Agenda' },
+    ],
+  },
+  {
+    id: 'inmuebles',
+    label: 'Inmuebles',
+    icon: <Building2 />,
+    children: [
+      { to: '/inmuebles', label: 'Todos los inmuebles' },
+      { to: '/proyectos', label: 'Proyectos' },
+      // Lo que entra por el sitio publico es inventario por nacer, no una
+      // gestion aparte: se mira desde donde se mira el inventario.
+      { to: '/solicitudes', label: 'Consignaciones' },
+    ],
+  },
+  {
+    id: 'clientes',
+    label: 'Clientes',
+    icon: <Users />,
+    children: [
+      { to: '/clientes', label: 'Todos los clientes' },
+      { to: '/embudo', label: 'Embudo' },
+      { to: '/conversaciones', label: 'Conversaciones' },
+      { to: '/creditos', label: 'Solicitudes de crédito' },
+    ],
+  },
+  // Un solo informe no es un desplegable: seria abrir un cajon para sacar una
+  // cosa. Se queda de enlace suelto con el nombre que usa WASI.
+  { to: '/informes', label: 'Reportes', icon: <BarChart3 /> },
 ];
 
-const MANAGE: NavItem[] = [
-  { to: '/solicitudes', label: 'Solicitudes', icon: <Inbox /> },
-  { to: '/creditos', label: 'Créditos', icon: <CreditCard /> },
-  { to: '/portales', label: 'Portales', icon: <Globe /> },
-  { to: '/informes', label: 'Informes', icon: <BarChart3 /> },
+const MANAGE: NavEntry[] = [
   // A proposito distinto de `Users`: equipo y clientes tienen que leerse
   // aparte de un vistazo.
-  { to: '/equipo', label: 'Equipo', icon: <UserCog /> },
-  // Abrir y cerrar oficinas es decision de la empresa, no de una oficina: el
-  // enlace no existe para nadie mas que el administrador.
-  { to: '/sedes', label: 'Sedes', icon: <Landmark />, roles: ['ADMIN'] },
-  { to: '/agenda-config', label: 'Horarios', icon: <CalendarClock /> },
-  { to: '/portada', label: 'Portada', icon: <LayoutTemplate /> },
-  { to: '/conversaciones', label: 'Conversaciones', icon: <MessageSquare /> },
-  { to: '/asistente', label: 'Asistente', icon: <Sparkles /> },
-  { to: '/textos', label: 'Textos', icon: <Languages /> },
+  { to: '/equipo', label: 'Usuarios', icon: <UserCog /> },
+  {
+    id: 'sitio',
+    label: 'Sitio web',
+    icon: <Globe />,
+    children: [
+      { to: '/portada', label: 'Portada' },
+      { to: '/textos', label: 'Textos' },
+      { to: '/asistente', label: 'Asistente' },
+      // Los portales son la otra cara publica del inventario: se decide junto
+      // a lo que se publica, no junto a los ajustes internos.
+      { to: '/portales', label: 'Portales' },
+    ],
+  },
+  {
+    id: 'configuracion',
+    label: 'Configuración',
+    icon: <Settings />,
+    children: [
+      // Abrir y cerrar oficinas es decision de la empresa, no de una oficina:
+      // el enlace no existe para nadie mas que el administrador.
+      { to: '/sedes', label: 'Sedes', roles: ['ADMIN'] },
+      { to: '/agenda-config', label: 'Horarios' },
+    ],
+  },
+  { to: '/clave', label: 'Mi cuenta', icon: <CircleUser /> },
 ];
+
+/** Si el enlace es el que se esta viendo — la misma regla que aplica NavLink. */
+function isActive(item: NavItem, pathname: string) {
+  if (item.end) return pathname === item.to;
+  return pathname === item.to || pathname.startsWith(`${item.to}/`);
+}
+
+const GROUPS_KEY = 'serrano.rail.grupos';
+
+/**
+ * Que grupos estan desplegados.
+ *
+ * Lo guardado es lo que el usuario decidio a mano, no una foto del rail: un
+ * grupo del que nunca toco la flecha se abre solo cuando dentro esta la
+ * pantalla que se ve. Asi cambiar de seccion despliega la que toca sin
+ * reabrir lo que el habia cerrado, y lo que si toco sobrevive a la navegacion
+ * y a la recarga.
+ */
+function useRailGroups(pathname: string) {
+  const [chosen, setChosen] = useState<Record<string, boolean>>(() => {
+    try {
+      const raw = localStorage.getItem(GROUPS_KEY);
+      return raw ? (JSON.parse(raw) as Record<string, boolean>) : {};
+    } catch {
+      return {};
+    }
+  });
+
+  const toggle = (id: string, open: boolean) => {
+    setChosen((prev) => {
+      const next = { ...prev, [id]: open };
+      try {
+        localStorage.setItem(GROUPS_KEY, JSON.stringify(next));
+      } catch {
+        // Navegacion privada: se pierde al recargar y no pasa nada.
+      }
+      return next;
+    });
+  };
+
+  const isOpen = (group: NavGroup) =>
+    chosen[group.id] ?? group.children.some((child) => isActive(child, pathname));
+
+  return { isOpen, toggle };
+}
 
 /*
   El className de NavLink va como cadena y el estado activo se pesca con
@@ -86,6 +183,18 @@ const RAIL_LINK = cn(
   'text-white/70 transition-colors hover:bg-white/10 hover:text-white',
   '[&.active]:bg-white [&.active]:text-rail',
   '[&_svg]:size-4 [&_svg]:shrink-0',
+);
+
+/*
+  El hijo no lleva icono ni versal: la sangria y el filete de la izquierda son
+  lo que dice que cuelga de algo, y bajar la voz evita que los dos niveles
+  compitan por la mirada.
+*/
+const RAIL_SUB = cn(
+  'flex items-center rounded-md py-1.5 pr-3 pl-6',
+  'text-[13px] font-medium tracking-tight normal-case',
+  'text-white/60 transition-colors hover:bg-white/10 hover:text-white',
+  '[&.active]:bg-white [&.active]:text-rail',
 );
 
 /**
@@ -139,10 +248,112 @@ function BranchPicker() {
   );
 }
 
-function RailNav({ onNavigate }: { onNavigate: () => void }) {
+/** Un desplegable del rail con sus hijos dentro. */
+function RailGroup({
+  group,
+  open,
+  onToggle,
+  onNavigate,
+  pathname,
+}: {
+  group: NavGroup;
+  open: boolean;
+  onToggle: (open: boolean) => void;
+  onNavigate: () => void;
+  pathname: string;
+}) {
+  const panelId = `rail-${group.id}`;
+  const holdsActive = group.children.some((child) => isActive(child, pathname));
+
+  return (
+    <div>
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={panelId}
+        onClick={() => onToggle(!open)}
+        className={cn(
+          RAIL_LINK,
+          'w-full cursor-pointer text-left',
+          // Cerrado, el grupo es lo unico que queda en pantalla de la pagina
+          // que se esta viendo: sin esta marca el rail no diria donde estas.
+          holdsActive && !open && 'bg-white/10 text-white',
+        )}
+      >
+        {group.icon}
+        <span className="flex-1">{group.label}</span>
+        <ChevronRight
+          aria-hidden
+          className={cn('transition-transform duration-150', open && 'rotate-90')}
+        />
+      </button>
+
+      <div id={panelId} hidden={!open} className="mt-0.5 ml-5 border-l border-white/10 pl-1.5">
+        {group.children.map((child) => (
+          <NavLink
+            key={child.to}
+            to={child.to}
+            end={child.end}
+            className={RAIL_SUB}
+            onClick={onNavigate}
+          >
+            {child.label}
+          </NavLink>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function RailNav({
+  onNavigate,
+  groups,
+  pathname,
+}: {
+  onNavigate: () => void;
+  groups: ReturnType<typeof useRailGroups>;
+  pathname: string;
+}) {
   const { user, signOut } = useAuth();
-  const visible = (item: NavItem) =>
+  const allowed = (item: NavItem) =>
     !item.roles || (user ? item.roles.includes(user.role) : false);
+
+  /*
+    Los permisos se aplican antes de pintar y hacia arriba: un grupo al que el
+    perfil no le deja ver ninguno de sus hijos no aparece, para que nadie abra
+    una flecha y se encuentre el hueco.
+  */
+  const render = (entry: NavEntry) => {
+    if (!isGroup(entry)) {
+      return allowed(entry) ? (
+        <NavLink
+          key={entry.to}
+          to={entry.to}
+          end={entry.end}
+          className={RAIL_LINK}
+          onClick={onNavigate}
+        >
+          {entry.icon}
+          {entry.label}
+        </NavLink>
+      ) : null;
+    }
+
+    const children = entry.children.filter(allowed);
+    if (!children.length) return null;
+    const group = { ...entry, children };
+
+    return (
+      <RailGroup
+        key={group.id}
+        group={group}
+        open={groups.isOpen(group)}
+        onToggle={(open) => groups.toggle(group.id, open)}
+        onNavigate={onNavigate}
+        pathname={pathname}
+      />
+    );
+  };
 
   return (
     <>
@@ -160,31 +371,10 @@ function RailNav({ onNavigate }: { onNavigate: () => void }) {
       <BranchPicker />
 
       <nav className="flex flex-1 flex-col gap-0.5 overflow-y-auto px-2.5">
-        {MAIN.map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            end={item.end}
-            className={RAIL_LINK}
-            onClick={onNavigate}
-          >
-            {item.icon}
-            {item.label}
-          </NavLink>
-        ))}
+        {MAIN.map(render)}
 
         <div className="micro-label px-3 pt-5 pb-1.5 text-white/40">Gestión</div>
-        {MANAGE.filter(visible).map((item) => (
-          <NavLink
-            key={item.to}
-            to={item.to}
-            className={RAIL_LINK}
-            onClick={onNavigate}
-          >
-            {item.icon}
-            {item.label}
-          </NavLink>
-        ))}
+        {MANAGE.map(render)}
       </nav>
 
       <div className="mx-2.5 mt-2 mb-3 border-t border-white/10 pt-3">
@@ -217,11 +407,14 @@ export function Shell() {
   const [open, setOpen] = useState(false);
   const location = useLocation();
   const { branchId } = useBranch();
+  // El rail se pinta dos veces —columna y Sheet—: el estado de los grupos vive
+  // aqui para que abrir uno en el movil no deje el otro a su aire.
+  const groups = useRailGroups(location.pathname);
 
   return (
     <div className="grid min-h-screen lg:grid-cols-[var(--spacing-rail)_1fr]">
       <aside className="sticky top-0 hidden h-screen flex-col border-t-4 border-rail-line bg-rail text-white lg:flex">
-        <RailNav onNavigate={() => undefined} />
+        <RailNav onNavigate={() => undefined} groups={groups} pathname={location.pathname} />
       </aside>
 
       <Sheet open={open} onOpenChange={setOpen}>
@@ -240,7 +433,11 @@ export function Shell() {
           >
             <X className="size-5" />
           </button>
-          <RailNav onNavigate={() => setOpen(false)} />
+          <RailNav
+            onNavigate={() => setOpen(false)}
+            groups={groups}
+            pathname={location.pathname}
+          />
         </SheetContent>
       </Sheet>
 
