@@ -211,7 +211,12 @@ export function Attendance() {
               action={
                 <span className="tabular text-sm font-semibold">
                   {duration(today.workedMinutes)}
-                  {today.sessions.some((s) => s.open) && (
+                  {/* La jornada abierta la dice `working`, no las sesiones de
+                      hoy: quien entro anoche y sigue dentro no tiene ninguna
+                      sesion apuntada a hoy —la jornada cuenta en el dia en que
+                      empezo— y esa es justo la persona a la que hay que
+                      recordarle que la tiene sin cerrar. */}
+                  {today.working && (
                     <span className="ml-2 text-xs font-normal text-muted-foreground">
                       jornada abierta
                     </span>
@@ -225,6 +230,16 @@ export function Attendance() {
                     <MarkRow key={item.id} mark={item} />
                   ))}
                 </ol>
+              ) : today.working ? (
+                /*
+                  Dentro pero sin marcas hoy: la entrada fue ayer y sigue
+                  abierta. Un "todavia no has marcado nada hoy" a secas aqui
+                  suena a que no ha fichado, que es lo contrario de lo que pasa.
+                */
+                <p className="text-sm text-muted-foreground">
+                  Tu entrada quedó apuntada al día en que la hiciste y la jornada sigue
+                  abierta. Cuando marques la salida, el total contará en ese día.
+                </p>
               ) : (
                 <p className="text-sm text-muted-foreground">
                   Todavía no has marcado nada hoy.
@@ -343,8 +358,15 @@ function MarkRow({ mark }: { mark: AttendanceMark }) {
 }
 
 function DayRow({ day }: { day: AttendanceDay }) {
-  const first = day.marks.find((m) => m.type === 'IN') ?? day.marks[0];
-  const last = [...day.marks].reverse().find((m) => m.type === 'OUT');
+  /*
+    El rango sale de las jornadas y no de las marcas sueltas porque las
+    jornadas cruzan la medianoche: una que empezo a las 23:40 se apunta a este
+    dia aunque su salida sea una marca del dia siguiente, y buscandola entre
+    las marcas de hoy no aparece —saldria "sin cerrar" una jornada ya cerrada—.
+    `checkIn` puede venir nulo cuando la entrada quedo fuera del rango pedido.
+  */
+  const first = day.sessions.find((s) => s.checkIn)?.checkIn ?? day.marks[0];
+  const last = [...day.sessions].reverse().find((s) => s.checkOut)?.checkOut;
 
   return (
     <li className="flex items-center justify-between gap-4 px-5 py-3.5">
