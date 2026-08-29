@@ -26,6 +26,7 @@ import { Translations } from '@/pages/Translations';
 import { HomeShowcase } from './pages/HomeShowcase'
 import { Team } from './pages/Team';
 import { Branches } from './pages/Branches';
+import { Attendance } from './pages/Attendance';
 
 /**
  * Puerta de entrada al panel.
@@ -76,6 +77,7 @@ export default function App() {
               <Route path="agenda" element={<Calendar />} />
               <Route path="portales" element={<Portals />} />
               <Route path="informes" element={<Reports />} />
+              <Route path="asistencia" element={<Attendance />} />
               <Route path="equipo" element={<Team />} />
               <Route path="sedes" element={<Branches />} />
               <Route path="agenda-config" element={<BookingSettings />} />
