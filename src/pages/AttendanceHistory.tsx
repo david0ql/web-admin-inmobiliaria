@@ -51,6 +51,22 @@ const AttendanceMap = lazy(() =>
   import('../components/AttendanceMap').then((m) => ({ default: m.AttendanceMap })),
 );
 
+/**
+ * Cuantas jornadas se dibujan en el mapa como mucho.
+ *
+ * La lista y los totales van SIEMPRE completos: aqui no se recorta ningun dato
+ * del que dependa una nomina. Lo que se acota es solo el dibujo, y por dos
+ * razones que van juntas. Con las 5.000 marcas que la API deja pedir, el mapa
+ * tarda casi cinco segundos en pintarse y cada clic en una fila responde medio
+ * segundo mas tarde — medido en el navegador—; y sobre todo, cinco mil
+ * chinchetas apiladas encima de la misma oficina son una mancha de la que no se
+ * lee absolutamente nada, asi que el coste no compra informacion.
+ *
+ * 400 jornadas —hasta 800 marcas— se pintan al instante y siguen siendo mas de
+ * lo que nadie mira de un vistazo. Cuando se recorta, la pantalla lo dice.
+ */
+const MAX_EN_MAPA = 400;
+
 /** Una fila de la lista: una jornada, con el dia y la persona a los que va. */
 interface Fila {
   key: string;
@@ -171,15 +187,27 @@ export function AttendanceHistory() {
     return { minutos, abiertas };
   }, [totales]);
 
-  // Al mapa solo van las jornadas con algun punto. Es la misma lista para el
-  // mapa y para el encuadre: lo que se ve es exactamente lo que hay filtrado.
-  const enMapa = useMemo(
+  // Al mapa solo van las jornadas con algun punto, y como mucho `MAX_EN_MAPA`.
+  const situables = useMemo(
     () =>
-      filas
-        .filter((f) => hasPoint(f.session.checkIn) || hasPoint(f.session.checkOut))
-        .map((f) => f.session),
+      filas.filter(
+        (f) => hasPoint(f.session.checkIn) || hasPoint(f.session.checkOut),
+      ),
     [filas],
   );
+
+  const enMapa = useMemo(() => {
+    const visibles = situables.slice(0, MAX_EN_MAPA);
+    // La elegida entra siempre, aunque haya caido fuera del recorte: si no,
+    // pulsar una fila de mas abajo dejaria el mapa quieto sin decir por que.
+    if (elegida && !visibles.some((f) => f.key === elegida)) {
+      const suya = situables.find((f) => f.key === elegida);
+      if (suya) visibles.push(suya);
+    }
+    return visibles.map((f) => f.session);
+  }, [situables, elegida]);
+
+  const recortadas = Math.max(0, situables.length - MAX_EN_MAPA);
 
   // Elegir en el mapa tiene que mover la lista: si no, la fila de la jornada
   // que acabas de pulsar puede estar cien filas mas abajo.
@@ -311,7 +339,7 @@ export function AttendanceHistory() {
             </div>
 
             <Card title="Dónde marcaron" action={<Leyenda />} flush>
-              {enMapa.length === 0 ? (
+              {situables.length === 0 ? (
                 <div className="p-5">
                   <Empty title="Nada que situar en el mapa">
                     {filas.length
@@ -320,15 +348,25 @@ export function AttendanceHistory() {
                   </Empty>
                 </div>
               ) : (
-                <div className="h-[440px] w-full">
-                  <Suspense fallback={<div className="size-full bg-secondary" />}>
-                    <AttendanceMap
-                      sessions={enMapa}
-                      selectedId={elegida}
-                      onSelect={senalar}
-                    />
-                  </Suspense>
-                </div>
+                <>
+                  <div className="h-[440px] w-full">
+                    <Suspense fallback={<div className="size-full bg-secondary" />}>
+                      <AttendanceMap
+                        sessions={enMapa}
+                        selectedId={elegida}
+                        onSelect={senalar}
+                      />
+                    </Suspense>
+                  </div>
+                  {recortadas > 0 && (
+                    <p className="note border-t px-5 py-2.5 normal-case">
+                      El mapa dibuja las {MAX_EN_MAPA} jornadas más recientes de las{' '}
+                      {situables.length.toLocaleString('es-CO')} que hay filtradas. La
+                      lista y los totales de abajo están completos; para verlas todas
+                      sobre el mapa, acota las fechas o elige una persona.
+                    </p>
+                  )}
+                </>
               )}
             </Card>
 
