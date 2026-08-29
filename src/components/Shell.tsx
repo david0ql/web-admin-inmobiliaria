@@ -143,7 +143,13 @@ const MANAGE: NavEntry[] = [
       { to: '/agenda-config', label: 'Horarios' },
     ],
   },
-  { to: '/clave', label: 'Mi cuenta', icon: <CircleUser /> },
+  /*
+    A `/mi-cuenta`, no a `/clave`. `/clave` sigue existiendo, pero es la
+    pantalla de la contrasena inicial obligatoria: vive fuera del Shell y es a
+    donde `Protected()` manda a quien todavia arrastra la generica. Ahora que
+    cada uno tiene una ficha propia que editar, el enlace del menu apunta ahi.
+  */
+  { to: '/mi-cuenta', label: 'Mi cuenta', icon: <CircleUser /> },
 ];
 
 /** Si el enlace es el que se esta viendo — la misma regla que aplica NavLink. */

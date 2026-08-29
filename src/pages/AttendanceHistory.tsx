@@ -373,7 +373,11 @@ export function AttendanceHistory() {
                           <Td className="whitespace-nowrap">{dayShort(fila.date)}</Td>
                           <Td>
                             {fila.session.checkIn ? (
-                              <Marca mark={fila.session.checkIn} tipo="entrada" />
+                              <Marca
+                                mark={fila.session.checkIn}
+                                tipo="entrada"
+                                dia={fila.date}
+                              />
                             ) : (
                               // Una salida sin su entrada no es un error de la
                               // persona: la entrada quedo fuera del rango. Se
@@ -388,7 +392,11 @@ export function AttendanceHistory() {
                           </Td>
                           <Td>
                             {fila.session.checkOut ? (
-                              <Marca mark={fila.session.checkOut} tipo="salida" />
+                              <Marca
+                                mark={fila.session.checkOut}
+                                tipo="salida"
+                                dia={fila.date}
+                              />
                             ) : (
                               <span className="flex flex-col gap-1">
                                 <Badge tone="blue">Sigue dentro</Badge>
@@ -498,8 +506,23 @@ function Atajo({ label, onClick }: { label: string; onClick: () => void }) {
 }
 
 /** Una marca en la tabla: hora, sitio y, si hace falta, el aviso de precision. */
-function Marca({ mark, tipo }: { mark: TeamMark; tipo: 'entrada' | 'salida' }) {
+function Marca({
+  mark,
+  tipo,
+  dia,
+}: {
+  mark: TeamMark;
+  tipo: 'entrada' | 'salida';
+  /** El dia al que la API apunta la jornada, para poder delatar el desfase. */
+  dia: string;
+}) {
   const Icono = tipo === 'entrada' ? LogIn : LogOut;
+  // Una jornada se apunta al dia en que EMPEZO, asi que la que cruza medianoche
+  // sale a una hora que pertenece al dia siguiente. Sin decirlo, la fila del
+  // dia 24 con salida a las 00:25 se lee como si hubiera salido esa madrugada
+  // —doce horas antes de cuando salio de verdad— y eso, en una nomina, es un
+  // error que no detecta nadie.
+  const desfase = daysBetween(dia, mark.date) - 1;
 
   return (
     <span className="flex min-w-0 flex-col gap-0.5">
@@ -512,6 +535,14 @@ function Marca({ mark, tipo }: { mark: TeamMark; tipo: 'entrada' | 'salida' }) {
           )}
         />
         <strong className="tabular font-medium">{mark.time}</strong>
+        {desfase !== 0 && (
+          <span
+            className="note normal-case"
+            title={`${tipo === 'entrada' ? 'Entró' : 'Salió'} el ${dayShort(mark.date)}`}
+          >
+            {desfase > 0 ? `+${desfase} d` : `${desfase} d`}
+          </span>
+        )}
       </span>
       <span
         className="note max-w-64 truncate normal-case"
