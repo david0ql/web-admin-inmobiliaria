@@ -8,6 +8,7 @@ import {
   Globe,
   Home,
   LogOut,
+  MapPinned,
   Menu,
   Settings,
   UserCog,
@@ -66,6 +67,11 @@ const MAIN: NavEntry[] = [
     children: [
       { to: '/', label: 'Panel', end: true },
       { to: '/agenda', label: 'Agenda' },
+      // Marcar entrada y salida es de todos y es de todos los dias, como abrir
+      // el panel o mirar la agenda: por eso vive aqui y no en Gestion. `end`
+      // porque la historia del equipo cuelga de esta misma ruta y sin el los
+      // dos enlaces se encenderian a la vez.
+      { to: '/asistencia', label: 'Mi asistencia', end: true },
     ],
   },
   {
@@ -100,6 +106,19 @@ const MANAGE: NavEntry[] = [
   // A proposito distinto de `Users`: equipo y clientes tienen que leerse
   // aparte de un vistazo.
   { to: '/equipo', label: 'Usuarios', icon: <UserCog /> },
+  /*
+    La historia de asistencia va pegada a Usuarios porque es lo mismo mirado
+    por otro lado: quien esta en el equipo y que hace ese equipo. No entra en
+    ningun grupo —seria abrir un cajon para sacar una cosa, igual que Reportes—
+    y no existe para quien no manda sobre nadie: un asesor tiene su propia
+    pantalla en Inicio, y de los demas no ve nada.
+  */
+  {
+    to: '/asistencia/historial',
+    label: 'Asistencia',
+    icon: <MapPinned />,
+    roles: ['ADMIN', 'DIRECTOR', 'COORDINATOR', 'MANAGER'],
+  },
   {
     id: 'sitio',
     label: 'Sitio web',

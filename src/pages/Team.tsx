@@ -2,6 +2,8 @@ import { useState } from 'react';
 import {
   ApiError,
   api,
+  canEditAgent,
+  canResetPassword,
   runsBranch,
   seesAllBranches,
   type Agent,
@@ -24,6 +26,7 @@ import {
   Loading,
   Modal,
   PageBody,
+  SectionHeading,
   SELECT_CLASS,
   SelectField,
   Table,
@@ -35,6 +38,13 @@ import {
 } from '../components/ui';
 import { Input } from '../components/ui/input';
 import { ASSIGNABLE_ROLES, ROLE_LABEL, WEEKDAYS, relative } from '../lib/format';
+import {
+  IdentityFields,
+  PhotoPicker,
+  draftFrom,
+  identityPayload,
+  type IdentityDraft,
+} from '../components/people/identity';
 import { cn } from '../lib/utils';
 
 export function Team() {
@@ -42,6 +52,7 @@ export function Team() {
   const { branches } = useBranch();
   const [includeInactive, setIncludeInactive] = useState(true);
   const [creating, setCreating] = useState(false);
+  const [editing, setEditing] = useState<Agent | null>(null);
   const [shiftsFor, setShiftsFor] = useState<Agent | null>(null);
 
   const { data, error, loading, reload } = useFetch<Agent[]>(
@@ -145,10 +156,24 @@ export function Team() {
                       <Td num hideSm className="text-muted-foreground">
                         {agent.lastLoginAt ? relative(agent.lastLoginAt) : 'nunca'}
                       </Td>
-                      <Td className="w-[120px]">
-                        <Button variant="outline" size="sm" onClick={() => setShiftsFor(agent)}>
-                          Turnos
-                        </Button>
+                      <Td className="w-[200px]">
+                        <span className="flex justify-end gap-2">
+                          {/* El boton solo aparece donde la API va a decir que
+                              si. Quien no puede editar a nadie tampoco ve una
+                              columna de botones muertos. */}
+                          {canEditAgent(user, agent) && (
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => setEditing(agent)}
+                            >
+                              Editar
+                            </Button>
+                          )}
+                          <Button variant="outline" size="sm" onClick={() => setShiftsFor(agent)}>
+                            Turnos
+                          </Button>
+                        </span>
                       </Td>
                     </Tr>
                   ))}
@@ -163,6 +188,17 @@ export function Team() {
           onClose={() => setCreating(false)}
           onDone={() => {
             setCreating(false);
+            reload();
+          }}
+        />
+      )}
+
+      {editing && (
+        <EditAgentModal
+          agent={editing}
+          onClose={() => setEditing(null)}
+          onDone={() => {
+            setEditing(null);
             reload();
           }}
         />
@@ -337,6 +373,239 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
         )}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * La ficha de una persona vista desde el equipo.
+ *
+ * Tres bloques y en este orden a proposito: quien es, que perfil tiene y como
+ * entra. El ultimo es un restablecimiento —no un «cambiar contrasena»— y se
+ * dice asi de claro, porque quien lo usa no sabe la clave vieja y la persona
+ * afectada se va a encontrar con la sesion cerrada.
+ *
+ * Los bloques que no le tocan a quien mira no se pintan apagados: se quitan.
+ * Un formulario lleno de campos grises sin explicar solo genera preguntas.
+ */
+function EditAgentModal({
+  agent,
+  onClose,
+  onDone,
+}: {
+  agent: Agent;
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { user } = useAuth();
+  const { branches } = useBranch();
+
+  const [draft, setDraft] = useState<IdentityDraft>(() => draftFrom(agent));
+  const [photoUrl, setPhotoUrl] = useState(agent.photoUrl);
+  // `MANAGER` es el nombre viejo de `COORDINATOR` y no esta en la lista de
+  // perfiles que se ofrecen: se muestra ya con el nombre nuevo, que es lo que
+  // se guardaria si se toca cualquier otra cosa de la ficha.
+  const [role, setRole] = useState<Role>(
+    agent.role === 'MANAGER' ? 'COORDINATOR' : agent.role,
+  );
+  const [branchId, setBranchId] = useState(agent.branchId ?? '');
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const esUnoMismo = agent.id === user?.id;
+  // El perfil y la sede los mueve la administracion y nunca sobre si misma:
+  // la misma regla que impone `assertCanChangeRoleOrBranch` en la API.
+  const puedeMoverRango = user?.role === 'ADMIN' && !esUnoMismo;
+  const pideSede = !seesAllBranches(role);
+
+  async function save() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.patch(`/agents/${agent.id}`, {
+        ...identityPayload(draft),
+        ...(puedeMoverRango
+          ? { role, branchId: pideSede ? branchId : null }
+          : {}),
+      });
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudieron guardar los cambios.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal
+      title={`Ficha de ${agent.firstName}`}
+      onClose={onClose}
+      footer={
+        <>
+          <Button variant="outline" onClick={onClose}>
+            Cancelar
+          </Button>
+          <Button
+            loading={busy}
+            disabled={
+              !draft.firstName.trim() ||
+              !draft.email.trim() ||
+              (puedeMoverRango && pideSede && !branchId)
+            }
+            onClick={() => void save()}
+          >
+            Guardar cambios
+          </Button>
+        </>
+      }
+    >
+      <div className="flex flex-col gap-4">
+        {error && <Alert>{error}</Alert>}
+
+        <PhotoPicker
+          agentId={agent.id}
+          name={`${agent.firstName} ${agent.lastName ?? ''}`}
+          photoUrl={photoUrl}
+          onChanged={(actualizado) => setPhotoUrl(actualizado.photoUrl)}
+        />
+
+        <IdentityFields draft={draft} onChange={setDraft} />
+
+        {puedeMoverRango ? (
+          <div className="grid gap-4 border-t pt-4 sm:grid-cols-2">
+            <SelectField
+              label="Perfil"
+              value={role}
+              onChange={(e) => setRole(e.target.value as Role)}
+            >
+              {ASSIGNABLE_ROLES.map((r) => (
+                <option key={r} value={r}>
+                  {ROLE_LABEL[r]}
+                </option>
+              ))}
+            </SelectField>
+            {pideSede ? (
+              <SelectField
+                label="Sede"
+                required
+                value={branchId}
+                onChange={(e) => setBranchId(e.target.value)}
+              >
+                <option value="">Elige una sede</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </SelectField>
+            ) : (
+              <p className="self-end text-xs text-muted-foreground">
+                {ROLE_LABEL[role]} no pertenece a ninguna sede: las ve todas.
+              </p>
+            )}
+          </div>
+        ) : (
+          <p className="border-t pt-4 text-xs text-muted-foreground">
+            El perfil ({ROLE_LABEL[agent.role] ?? agent.role}) y la sede solo los
+            cambia la administración.
+          </p>
+        )}
+
+        {canResetPassword(user, agent) && (
+          <ResetPasswordSection agent={agent} />
+        )}
+
+        {esUnoMismo && (
+          <p className="border-t pt-4 text-xs text-muted-foreground">
+            Para cambiar tu contraseña ve a «Mi cuenta»: allí se te pide la actual.
+          </p>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Restablecer la contrasena de otra persona.
+ *
+ * Separado del resto del formulario y con su propio boton: no se guarda «de
+ * paso» al pulsar Guardar cambios. Cambiarle la clave a alguien le tira las
+ * sesiones abiertas y le obliga a elegir una nueva al entrar, y eso no puede
+ * pasar por descuido mientras se corrige un apellido.
+ */
+function ResetPasswordSection({ agent }: { agent: Agent }) {
+  const [password, setPassword] = useState('');
+  const [repeat, setRepeat] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [done, setDone] = useState(false);
+  const [busy, setBusy] = useState(false);
+
+  async function reset() {
+    if (password !== repeat) {
+      setError('Las dos contraseñas no coinciden.');
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      await api.put(`/agents/${agent.id}/password`, { password });
+      setDone(true);
+      setPassword('');
+      setRepeat('');
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudo restablecer la contraseña.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-3 border-t pt-4">
+      <SectionHeading light="Restablecer" strong="contraseña" as="h3" />
+      <p className="text-xs text-muted-foreground">
+        Dale una contraseña provisional y dísela por un canal aparte. Al guardarla
+        se le cierran todas las sesiones y la aplicación le exigirá elegir una
+        suya en el siguiente acceso.
+      </p>
+
+      {error && <Alert>{error}</Alert>}
+      {done && (
+        <Alert tone="warn">
+          Contraseña restablecida. Sus sesiones abiertas ya no valen.
+        </Alert>
+      )}
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Contraseña provisional"
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+        />
+        <Field
+          label="Repítela"
+          type="password"
+          autoComplete="new-password"
+          value={repeat}
+          onChange={(e) => setRepeat(e.target.value)}
+        />
+      </div>
+
+      <Button
+        variant="outline"
+        className="self-start"
+        loading={busy}
+        disabled={password.length < 8}
+        onClick={() => void reset()}
+      >
+        Restablecer contraseña
+      </Button>
+    </div>
   );
 }
 

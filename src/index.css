@@ -49,8 +49,9 @@
   se edita aqui — si algo tiene que cambiar, cambia en web-sell y se vuelve a
   copiar, para que `diff` entre los dos archivos siga sirviendo de algo.
 
-  Lo unico que se quito de la copia es el bloque `.leaflet-container`: el panel
-  no dibuja mapas.
+  Lo unico que se quito de la copia es el bloque `.leaflet-container`, que
+  ahora vive en la PARTE B: el panel dibuja un mapa —el de asistencia— y no
+  tenia sentido arrastrar el del sitio publico hasta aqui.
   ───────────────────────────────────────────────────────────────────────────
 */
 
@@ -339,5 +340,75 @@
     background-size: 26px 26px;
     mask-image: radial-gradient(ellipse at 25% 45%, #000 8%, transparent 70%);
     pointer-events: none;
+  }
+
+  /*
+    Leaflet. Solo lo usa el mapa de asistencia, pero las reglas son de la
+    libreria y por eso no pueden ser un componente.
+
+    `z-index: 0` con `isolation` es lo que impide que los paneles del mapa
+    —que llegan a 700— se pongan por delante de la cabecera de pagina, que es
+    sticky a 30. Es la misma correccion que lleva web-sell.
+  */
+  .leaflet-container {
+    position: relative;
+    z-index: 0;
+    isolation: isolate;
+    background: var(--secondary);
+    font-family: inherit;
+  }
+
+  .leaflet-container a.leaflet-popup-close-button {
+    color: var(--muted-foreground);
+  }
+
+  /*
+    La chincheta de una marca. El tono lo pone el mapa por `--marca` —lo elige
+    el tipo de marca, no una clase que Tailwind pudiera generar— y la forma
+    (circulo la entrada, rombo la salida) va en el `style` por lo mismo.
+  */
+  .marca-asistencia {
+    display: grid;
+    place-items: center;
+    background: var(--marca);
+    border: 2px solid #fff;
+    box-shadow: 0 1px 5px rgb(0 0 0 / 0.4);
+    transition:
+      width 0.15s ease,
+      height 0.15s ease;
+  }
+
+  .marca-asistencia > svg {
+    width: 70%;
+    height: 70%;
+  }
+
+  /* La elegida en la lista: el halo la encuentra sin tener que ampliar. */
+  .marca-asistencia--activa {
+    box-shadow:
+      0 0 0 4px color-mix(in srgb, var(--marca) 35%, transparent),
+      0 1px 6px rgb(0 0 0 / 0.45);
+  }
+
+  .globo-asistencia {
+    display: grid;
+    gap: 0.125rem;
+    min-width: 11rem;
+    font-size: 0.8125rem;
+    line-height: 1.35;
+  }
+
+  .globo-asistencia__tipo {
+    font-weight: 700;
+  }
+
+  .globo-asistencia__dir {
+    color: var(--muted-foreground);
+  }
+
+  /* El aviso de precision mala: si el punto no situa a nadie, hay que verlo. */
+  .globo-asistencia__aviso {
+    color: var(--destructive);
+    font-weight: 500;
   }
 }

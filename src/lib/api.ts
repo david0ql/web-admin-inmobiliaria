@@ -181,6 +181,51 @@ async function send<T>(path: string, options: RequestOptions, retry = true): Pro
 }
 
 /**
+ * Sube un fichero con `multipart/form-data`.
+ *
+ * No pasa por `send`: ahi la cabecera `Content-Type` se pone a mano, y en un
+ * multipart eso es justo lo que no hay que hacer — el navegador tiene que
+ * escribirla el, porque lleva dentro el `boundary` que el separa. Ponerla a
+ * mano deja al servidor sin saber por donde cortar el cuerpo.
+ */
+export async function upload<T>(
+  path: string,
+  field: string,
+  file: File,
+  retry = true,
+): Promise<T> {
+  const body = new FormData();
+  body.append(field, file);
+
+  const headers: Record<string, string> = {};
+  const access = tokens.access;
+  if (access) headers.Authorization = `Bearer ${access}`;
+  const branch = branchScope.current;
+  if (branch) headers['x-branch'] = branch;
+
+  const res = await fetch(`${BASE}${path}`, { method: 'POST', headers, body });
+
+  // La misma renovacion que en `send`: el token dura 15 minutos y elegir una
+  // foto en el movil se lleva un rato largo.
+  if (res.status === 401 && retry && tokens.refresh && (await refreshSession())) {
+    return upload<T>(path, field, file, false);
+  }
+
+  const text = await res.text();
+  const data: unknown = text ? JSON.parse(text) : null;
+
+  if (!res.ok) {
+    const message = (data as { message?: string | string[] } | null)?.message;
+    throw new ApiError(
+      res.status,
+      Array.isArray(message) ? message.join('. ') : (message ?? 'No se pudo subir el fichero'),
+      data,
+    );
+  }
+  return data as T;
+}
+
+/**
  * Descarga un fichero que exige sesión.
  *
  * Un `<a href>` no lleva la cabecera `Authorization`, así que para lo que está
@@ -257,6 +302,54 @@ export function seesAllBranches(role: Role | undefined | null): boolean {
 /** Manda en una sede: da de alta a los suyos y toca su inventario. */
 export function runsBranch(role: Role | undefined | null): boolean {
   return role === 'COORDINATOR' || role === 'MANAGER';
+}
+
+/**
+ * El escalafon, igual que en el servidor.
+ *
+ * Vive duplicado aqui y eso es a proposito: la barrera es la API —esto no
+ * decide nada, solo evita ofrecer botones que van a devolver un 403—. Si las
+ * dos listas se separan, lo peor que pasa es que el panel enseñe de menos o
+ * que un boton falle al pulsarlo; nunca que alguien edite lo que no debe.
+ */
+const RANK: Record<Role, number> = {
+  ADMIN: 4,
+  DIRECTOR: 3,
+  COORDINATOR: 2,
+  MANAGER: 2,
+  AGENT: 1,
+  VIEWER: 1,
+};
+
+/** Lo minimo que hace falta saber de alguien para decidir si se puede editar. */
+export interface EditableAgent {
+  id: string;
+  role: Role;
+  branchId: string | null;
+}
+
+/** Si `me` puede editar la ficha de `target`. Copia de `iam/scope.ts`. */
+export function canEditAgent(
+  me: Me | null,
+  target: EditableAgent | null,
+): boolean {
+  if (!me || !target) return false;
+  if (me.id === target.id) return true;
+  if (me.role === 'ADMIN') return true;
+  if (RANK[me.role] <= RANK[target.role]) return false;
+  if (seesAllBranches(me.role)) return true;
+  return !!me.branchId && target.branchId === me.branchId;
+}
+
+/**
+ * Si `me` puede ponerle una contrasena nueva a `target`.
+ *
+ * Sobre uno mismo nunca: la propia se cambia en «Mi cuenta», que pide la
+ * actual. Son dos operaciones distintas y la pantalla tiene que decirlo tan
+ * claro como la API.
+ */
+export function canResetPassword(me: Me | null, target: EditableAgent): boolean {
+  return !!me && me.id !== target.id && canEditAgent(me, target);
 }
 
 export interface Branch {
