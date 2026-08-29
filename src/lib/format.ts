@@ -168,15 +168,6 @@ export const ROLE_LABEL: Record<string, string> = {
   VIEWER: 'Solo lectura',
 };
 
-/** Lo que se puede elegir al dar de alta: sin el alias viejo. */
-export const ASSIGNABLE_ROLES = [
-  'ADMIN',
-  'DIRECTOR',
-  'COORDINATOR',
-  'AGENT',
-  'VIEWER',
-] as const;
-
 export const INTEREST_ROLE_LABEL: Record<string, string> = {
   PROSPECT: 'Interesado',
   BUYER: 'Comprador',

@@ -321,6 +321,40 @@ const RANK: Record<Role, number> = {
   VIEWER: 1,
 };
 
+/**
+ * Lo que se puede elegir al dar de alta: sin el alias viejo.
+ *
+ * Vive aqui y no en `format.ts` porque no es una cuestion de como se escribe
+ * un rol, sino de cuales existen — y quien lo filtra es el escalafon de dos
+ * lineas mas abajo.
+ */
+export const ASSIGNABLE_ROLES: readonly Role[] = [
+  'ADMIN',
+  'DIRECTOR',
+  'COORDINATOR',
+  'AGENT',
+  'VIEWER',
+];
+
+/**
+ * Los perfiles que esta persona puede dar de alta.
+ *
+ * El mismo escalafon que usa la API en `assertCanCreateAgent`: nadie crea a un
+ * igual ni a un superior, y el administrador es la excepcion porque alguien
+ * tiene que poder crear el segundo. Ofrecer aqui lo que el servidor va a
+ * rechazar solo sirve para que el formulario falle al guardar.
+ */
+export function assignableRolesFor(me: Me | null): Role[] {
+  if (!me) return [];
+  if (me.role === 'ADMIN') return [...ASSIGNABLE_ROLES];
+  return ASSIGNABLE_ROLES.filter((role) => RANK[me.role] > RANK[role]);
+}
+
+/** Si tiene a alguien por debajo a quien dar de alta. */
+export function canCreateAgents(me: Me | null): boolean {
+  return assignableRolesFor(me).length > 0;
+}
+
 /** Lo minimo que hace falta saber de alguien para decidir si se puede editar. */
 export interface EditableAgent {
   id: string;

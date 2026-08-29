@@ -2,6 +2,8 @@ import { useState } from 'react';
 import {
   ApiError,
   api,
+  assignableRolesFor,
+  canCreateAgents,
   canEditAgent,
   canResetPassword,
   runsBranch,
@@ -37,7 +39,7 @@ import {
   Tr,
 } from '../components/ui';
 import { Input } from '../components/ui/input';
-import { ASSIGNABLE_ROLES, ROLE_LABEL, WEEKDAYS, relative } from '../lib/format';
+import { ROLE_LABEL, WEEKDAYS, relative } from '../lib/format';
 import {
   IdentityFields,
   PhotoPicker,
@@ -72,9 +74,10 @@ export function Team() {
               checked={includeInactive}
               onChange={(e) => setIncludeInactive(e.target.checked)}
             />
-            {/* El coordinador da de alta a los suyos; la API le limita a
-                asesores y consulta, y a su propia sede. */}
-            {can('ADMIN', 'COORDINATOR', 'MANAGER') && (
+            {/* Aparece para quien tenga a alguien por debajo en el escalafon:
+                la administracion, la direccion y quien manda en una sede. La
+                API le limita el perfil y, si es de una sede, tambien la sede. */}
+            {canCreateAgents(user) && (
               <Button onClick={() => setCreating(true)}>Nuevo usuario</Button>
             )}
           </>
@@ -229,18 +232,22 @@ function NewAgentModal({ onClose, onDone }: { onClose: () => void; onDone: () =>
   const { branches, branchId } = useBranch();
   const desdeUnaSede = runsBranch(user?.role);
 
-  const perfiles: Role[] = desdeUnaSede
-    ? ['AGENT', 'VIEWER']
-    : (ASSIGNABLE_ROLES.filter(
-        (role) => role !== 'ADMIN' || user?.role === 'ADMIN',
-      ) as Role[]);
+  // El escalafon, el mismo que aplica la API: nadie da de alta a un igual ni a
+  // un superior. La lista se calcula, no se escribe a mano por rol.
+  const perfiles = assignableRolesFor(user);
 
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
     email: '',
     cellPhone: '',
-    role: 'AGENT' as Role,
+    /*
+      Casi toda alta es de un asesor, asi que se propone ese aunque quien cree
+      pueda mas: a la direccion, que tiene «coordinador» de primero en su
+      lista, proponerle coordinador la empujaria a crear jefes de sede sin
+      querer.
+    */
+    role: (perfiles.includes('AGENT') ? 'AGENT' : perfiles[0]) as Role,
     // Al coordinador se le impone la suya; al administrador se le propone la
     // que tenga puesta en el selector, que es donde esta trabajando.
     branchId: desdeUnaSede
@@ -479,7 +486,7 @@ function EditAgentModal({
               value={role}
               onChange={(e) => setRole(e.target.value as Role)}
             >
-              {ASSIGNABLE_ROLES.map((r) => (
+              {assignableRolesFor(user).map((r) => (
                 <option key={r} value={r}>
                   {ROLE_LABEL[r]}
                 </option>
