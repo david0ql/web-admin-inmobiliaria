@@ -143,11 +143,15 @@ const MANAGE: NavEntry[] = [
       { to: '/agenda-config', label: 'Horarios' },
       /*
         Afinar el prompt cambia como se juzgan las fotos de TODO el inventario,
-        y las reglas tecnicas deciden que fichero entra: es configuracion de la
-        empresa, no de una oficina. Por eso cuelga de aqui y solo lo ve quien
-        manda sobre la agencia entera.
+        y los umbrales de la puerta deciden que fichero entra: es configuracion
+        de la empresa, no de una oficina.
+
+        Solo ADMIN, y no tambien DIRECTOR, porque es lo que hace la API: las
+        tres pestañas cuelgan de rutas con `@Roles(Role.ADMIN)`, y el
+        `RolesGuard` solo cuela a la direccion donde se pide MANAGER o
+        COORDINATOR. Enseñarselo a un director seria mandarle a tres 403.
       */
-      { to: '/imagenes-ia', label: 'Revisión de fotos', roles: ['ADMIN', 'DIRECTOR'] },
+      { to: '/imagenes-ia', label: 'Revisión de fotos', roles: ['ADMIN'] },
     ],
   },
   /*
