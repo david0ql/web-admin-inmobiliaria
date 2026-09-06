@@ -15,6 +15,13 @@ import {
 import { cn } from '@/lib/utils';
 
 /**
+ * Cuántas fotos entran en una llamada. Lo impone el servidor, y el panel tiene
+ * que saberlo: sin esto el botón de un inmueble con 30 fotos prometería 30 y
+ * mandaría 20, que es la peor forma de enseñar un precio.
+ */
+const LOTE_MAX = 20;
+
+/**
  * Lo que la IA opina de las fotos de un inmueble.
  *
  * Tres cosas que no son negociables y explican casi todo el diseño:
@@ -46,6 +53,9 @@ export function RevisionImagenes({
   const [aplicando, setAplicando] = useState(false);
   const [ignorado, setIgnorado] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /* Lo que el servidor NO volvió a cobrar en la última tanda. Se dice porque
+     es la prueba de que no se pagó dos veces lo mismo. */
+  const [ahorradas, setAhorradas] = useState<number | null>(null);
 
   const estado = useFetch<EstadoImagenesIA>((signal) => imagenesIA.estado(signal), []);
   const revision = useFetch<RevisionInmueble>(
@@ -107,7 +117,8 @@ export function RevisionImagenes({
     setAnalizando(true);
     setError(null);
     try {
-      await imagenesIA.analizar(propertyId, { force: modo === 'todas' });
+      const res = await imagenesIA.analizar(propertyId, { force: modo === 'todas' });
+      setAhorradas(res.skipped);
       setIgnorado(false);
       revision.reload();
     } catch (err) {
@@ -142,7 +153,12 @@ export function RevisionImagenes({
   if (estado.error || revision.error || !revision.data) return null;
 
   const total = images.length;
-  const aAnalizar = confirmando === 'todas' ? total : nuevas.length;
+  /* Lo que va a ir DE VERDAD en esta llamada: el servidor corta el lote en 20,
+     así que prometer más sería mentir sobre lo que se paga y sobre lo que se
+     va a ver al volver. */
+  const pedidas = confirmando === 'todas' ? total : nuevas.length;
+  const aAnalizar = Math.min(pedidas, LOTE_MAX);
+  const quedan = pedidas - aAnalizar;
 
   return (
     <Card
@@ -161,8 +177,8 @@ export function RevisionImagenes({
             onClick={() => setConfirmando(nuevas.length > 0 ? 'nuevas' : 'todas')}
           >
             {nuevas.length > 0
-              ? `Analizar ${nuevas.length} ${nuevas.length === 1 ? 'foto' : 'fotos'}`
-              : `Volver a analizar · ${total} ${total === 1 ? 'foto' : 'fotos'}`}
+              ? `Analizar ${Math.min(nuevas.length, LOTE_MAX)} ${nuevas.length === 1 ? 'foto' : 'fotos'}`
+              : `Volver a analizar · ${Math.min(total, LOTE_MAX)} ${total === 1 ? 'foto' : 'fotos'}`}
           </Button>
         )
       }
@@ -190,7 +206,19 @@ export function RevisionImagenes({
             <strong className="font-medium text-foreground">
               Son {total} {total === 1 ? 'imagen' : 'imágenes'} y cada una se cobra.
             </strong>
+            {total > LOTE_MAX &&
+              ` Van de ${LOTE_MAX} en ${LOTE_MAX}, así que harán falta varias tandas.`}
           </p>
+        )}
+
+        {/* La prueba de que no se pagó dos veces lo mismo. Vale la pena decirlo
+            justo después de gastar, que es cuando se piensa en el coste. */}
+        {ahorradas !== null && ahorradas > 0 && (
+          <Alert tone="ok">
+            {ahorradas === 1
+              ? 'Una foto ya estaba analizada con este prompt y no se volvió a cobrar.'
+              : `${ahorradas} fotos ya estaban analizadas con este prompt y no se volvieron a cobrar.`}
+          </Alert>
         )}
 
         {analizadas > 0 && (
@@ -318,6 +346,13 @@ export function RevisionImagenes({
               </strong>
               . Cada imagen es una llamada que la agencia paga.
             </p>
+            {quedan > 0 && (
+              <p className="text-muted-foreground">
+                El servidor analiza {LOTE_MAX} por tanda, así que{' '}
+                {quedan === 1 ? 'queda 1 foto' : `quedan ${quedan} fotos`} para la
+                siguiente. Vuelve a pulsar cuando acabe ésta.
+              </p>
+            )}
             {confirmando === 'nuevas' && analizadas > 0 && (
               <p className="text-muted-foreground">
                 Las {analizadas} ya analizadas no se vuelven a pagar: la pregunta es la
