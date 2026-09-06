@@ -673,6 +673,23 @@ export interface ConsignmentFile {
   bytes: number;
 }
 
+/**
+ * Lo que la puerta de calidad dijo de un fichero de la solicitud.
+ *
+ * Es para el asesor que la revisa, NO para el propietario: a quien manda las
+ * fotos de su casa se le dan las gracias y punto. Está preguntando si a la
+ * agencia le interesa, no publicando un anuncio, y devolverle una lista de
+ * reproches convierte eso en otra cosa.
+ */
+export interface ConsignmentFileNote {
+  originalName: string;
+  kind: 'PHOTO' | 'DOCUMENT';
+  /** Redactado por el servidor y sin rutas internas: se pinta tal cual. */
+  message: string;
+  /** `true` = no está en `files`; hay que volver a pedírselo al propietario. */
+  blocked: boolean;
+}
+
 export interface ConsignmentRequest {
   id: string;
   reference: string;
@@ -715,6 +732,8 @@ export interface ConsignmentRequest {
   ownerPhone: string;
   notes: string | null;
   files: ConsignmentFile[];
+  /** Vacío en las solicitudes anteriores a que esto existiera. */
+  fileNotes?: ConsignmentFileNote[];
   requestedVisitAt: string | null;
   propertyId: string | null;
   clientId: string | null;

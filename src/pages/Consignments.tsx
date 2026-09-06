@@ -254,6 +254,14 @@ function ConsignmentDetail({
   const editable = can('ADMIN', 'MANAGER', 'AGENT');
   const photos = request.files.filter((file) => file.kind === 'PHOTO');
   const documents = request.files.filter((file) => file.kind === 'DOCUMENT');
+  /*
+    Lo que la puerta dijo de los ficheros, partido en dos porque son dos
+    acciones distintas: lo que NO entró hay que volver a pedirlo al
+    propietario, y lo que entró con reparos solo hay que mirarlo. Mezclarlos
+    haría que el asesor llamase para pedir una foto que ya está aquí.
+  */
+  const faltan = (request.fileNotes ?? []).filter((n) => n.blocked);
+  const avisados = (request.fileNotes ?? []).filter((n) => !n.blocked);
   const convertible = !request.propertyId && request.cityId && request.propertyTypeId;
 
   async function review() {
@@ -406,6 +414,52 @@ function ConsignmentDetail({
         {request.notes && (
           <Card title="Observaciones del propietario">
             <p className="text-sm whitespace-pre-wrap">{request.notes}</p>
+          </Card>
+        )}
+
+        {/* Va ANTES de las fotos y los documentos: es lo que decide si esta
+            solicitud está completa o si hay que llamar al propietario, y eso se
+            lee antes que lo que sí llegó. */}
+        {faltan.length > 0 && (
+          <Card title={`No llegó · ${faltan.length}`}>
+            <div className="flex flex-col gap-3">
+              <p className="text-sm text-muted-foreground">
+                Esto no está en la solicitud. Al propietario no se le dijo nada —se le dio
+                las gracias y ya—, así que si hace falta hay que pedírselo al llamarle.
+              </p>
+              <ul className="flex list-none flex-col gap-2 p-0">
+                {faltan.map((nota, i) => (
+                  <li key={i} className="rounded-md border border-red-200 bg-red-50 p-3">
+                    <p className="text-sm font-medium text-red-900">
+                      {nota.originalName}
+                      <span className="ml-1.5 font-normal">
+                        {nota.kind === 'PHOTO' ? '· foto' : '· documento'}
+                      </span>
+                    </p>
+                    {/* Redactado por el servidor y sin rutas internas: tal cual. */}
+                    <p className="mt-0.5 text-sm text-red-800">{nota.message}</p>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </Card>
+        )}
+
+        {avisados.length > 0 && (
+          <Card title={`Entró, pero míralo · ${avisados.length}`}>
+            <ul className="flex list-none flex-col gap-2 p-0">
+              {avisados.map((nota, i) => (
+                <li key={i} className="rounded-md border border-amber-200 bg-amber-50 p-3">
+                  <p className="text-sm font-medium text-amber-900">
+                    {nota.originalName}
+                    <span className="ml-1.5 font-normal">
+                      {nota.kind === 'PHOTO' ? '· foto' : '· documento'}
+                    </span>
+                  </p>
+                  <p className="mt-0.5 text-sm text-amber-800">{nota.message}</p>
+                </li>
+              ))}
+            </ul>
           </Card>
         )}
 

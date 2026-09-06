@@ -450,6 +450,8 @@ function privacidad(veredicto: AnalisisImagen): string[] {
   if (p?.plates) dichos.push('placas de vehículo legibles');
   if (p?.documents) dichos.push('documentos con datos');
   if (p?.screens) dichos.push('pantallas con contenido legible');
+  /* Llegó después: en los análisis viejos no viene, y ausente es «no». */
+  if (p?.address) dichos.push('la dirección escrita en la fachada');
   return dichos;
 }
 

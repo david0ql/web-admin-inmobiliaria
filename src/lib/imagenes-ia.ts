@@ -33,6 +33,8 @@ export interface PrivacyFlags {
   plates: boolean;
   documents: boolean;
   screens: boolean;
+  /** La nomenclatura de la fachada o el rótulo del portal. */
+  address?: boolean;
   notes: string | null;
 }
 
