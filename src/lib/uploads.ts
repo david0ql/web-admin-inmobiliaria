@@ -39,6 +39,18 @@ export interface UploadItem {
   retriable: boolean;
 }
 
+/**
+ * Una foto que SI se guardo pero que conviene mirar: vertical, movida, oscura,
+ * casi repetida. Nunca es un fallo — quien lo lea no tiene que volver a
+ * subirla— y por eso no comparte sitio con los rechazos.
+ */
+export interface UploadWarning {
+  id: string;
+  name: string;
+  /** Redactados por la API para leerse tal cual, uno por problema. */
+  messages: string[];
+}
+
 /** Lo que el navegador acepta poner en un `<input type="file">` de imagenes. */
 export const ACCEPT_IMAGENES = 'image/jpeg,image/png,image/webp,image/avif,image/gif';
 
@@ -114,6 +126,26 @@ function parsear(text: string): Record<string, unknown> | null {
 }
 
 /**
+ * Los avisos de una foto que SI entro.
+ *
+ * Son otra cosa que un rechazo y no pueden pintarse igual: la foto esta
+ * guardada. Confundirlos hace que el asesor vuelva a subir una que ya esta
+ * dentro, y acabe con la ficha duplicada. Y no es un caso raro — sobre las
+ * 6.306 fotos reales, la API avisa el doble de veces de las que bloquea.
+ */
+function avisosDe(body: Record<string, unknown> | null): string[] {
+  const lista = body?.warnings;
+  if (!Array.isArray(lista)) return [];
+  return lista.flatMap((entrada) => {
+    const issues = (entrada as { issues?: unknown }).issues;
+    if (!Array.isArray(issues)) return [];
+    return issues
+      .map((issue) => (issue as { message?: unknown }).message)
+      .filter((mensaje): mensaje is string => typeof mensaje === 'string');
+  });
+}
+
+/**
  * El desglose por fichero, cuando la API lo manda.
  *
  * Como va una foto por peticion, si hay algo en `rejected` es la nuestra.
@@ -169,7 +201,7 @@ async function subirUna(
   campos: Record<string, string>,
   onProgress: (percent: number) => void,
   registrar: (xhr: XMLHttpRequest) => void,
-): Promise<void> {
+): Promise<string[]> {
   let res = await enviar(path, field, file, campos, onProgress, registrar);
 
   // El access token dura quince minutos y subir veinte fotos se pasa de ahi.
@@ -184,21 +216,37 @@ async function subirUna(
       unica foto esta en esa lista, esto es un fallo por mucho que el codigo
       sea 200.
     */
-    const descartada = rechazo(parsear(res.text));
+    const body = parsear(res.text);
+    const descartada = rechazo(body);
     if (descartada) throw new Error(descartada);
-    return;
+    return avisosDe(body);
   }
 
   throw new Error(motivo(res.status, res.text, file.name));
 }
 
 /**
+ * Cuantas suben a la vez.
+ *
+ * Fueron de una en una mientras la API repartia la posicion contando las que ya
+ * habia: dos peticiones simultaneas leian el mismo total y escribian la misma
+ * posicion, y lo mismo con la portada. Ahora eso se resuelve con un cerrojo por
+ * galeria en el servidor, asi que se puede solapar.
+ *
+ * Tres y no mas: en una subida de oficina el cuello es el ancho de banda, y
+ * repartirlo entre diez ficheros solo consigue que ninguno termine hasta el
+ * final —y que el progreso deje de significar nada—. Con tres se cubre la
+ * latencia de la peticion siguiente mientras la anterior todavia manda bytes.
+ */
+const A_LA_VEZ = 3;
+
+/**
  * La cola.
  *
- * Sube de una en una, no en paralelo, y es a proposito: la API coloca cada foto
- * al final contando las que ya hay, asi que dos peticiones a la vez se pisan la
- * posicion y el orden sale mezclado. Ademas, en una linea regular el tiempo
- * total es el mismo y de una en una el progreso que se ve es el de verdad.
+ * Reparte los ficheros entre unos pocos envios en paralelo, cada uno con su
+ * progreso, y no vuelve a pedir la ficha hasta que se vacia: con veinte fotos,
+ * recargar por cada una serian veinte peticiones de la pantalla entera
+ * compitiendo con la propia subida.
  */
 export function useImageUploads({
   path,
@@ -215,11 +263,19 @@ export function useImageUploads({
   onSettled: () => void;
 }) {
   const [items, setItems] = useState<UploadItem[]>([]);
+  /*
+    Los avisos viven aparte de la cola a proposito: la foto ya esta guardada, y
+    su tile desaparece en cuanto la recarga trae la imagen de verdad. Si el
+    aviso viviera en el tile se iria con el, justo antes de que a nadie le diera
+    tiempo a leerlo.
+  */
+  const [avisos, setAvisos] = useState<UploadWarning[]>([]);
 
   const ficheros = useRef(new Map<string, File>());
   const cola = useRef<string[]>([]);
-  const bombeando = useRef(false);
-  const enVuelo = useRef<XMLHttpRequest | null>(null);
+  const obreros = useRef(0);
+  const subidas = useRef(0);
+  const enVuelo = useRef(new Set<XMLHttpRequest>());
   const montado = useRef(true);
 
   // Las dos cambian de identidad en cada render; la cola necesita la ultima.
@@ -234,10 +290,11 @@ export function useImageUploads({
     montado.current = true;
     return () => {
       montado.current = false;
-      // Salir de la pantalla corta la subida en curso: seguir con ella dejaria
-      // peticiones vivas contra una ficha que ya nadie mira.
-      enVuelo.current?.abort();
-      for (const item of ficheros.current.keys()) ficheros.current.delete(item);
+      // Salir de la pantalla corta las subidas en curso: seguir con ellas
+      // dejaria peticiones vivas contra una ficha que ya nadie mira.
+      for (const xhr of enVuelo.current) xhr.abort();
+      enVuelo.current.clear();
+      ficheros.current.clear();
     };
   }, []);
 
@@ -248,44 +305,63 @@ export function useImageUploads({
     );
   }, []);
 
-  const bombear = useCallback(async () => {
-    if (bombeando.current) return;
-    bombeando.current = true;
-    let subidas = 0;
-
-    while (cola.current.length && montado.current) {
-      const id = cola.current.shift() as string;
-      const file = ficheros.current.get(id);
-      if (!file) continue;
-
-      actualizar(id, { state: 'uploading', progress: 0, reason: null });
-      try {
-        await subirUna(
-          pathRef.current,
-          field,
-          file,
-          camposRef.current ?? {},
-          (percent) => actualizar(id, { progress: percent }),
-          (xhr) => (enVuelo.current = xhr),
-        );
-        subidas += 1;
-        actualizar(id, { state: 'done', progress: 100, reason: null });
-        // El fichero ya no hace falta: son megas retenidos en memoria.
-        ficheros.current.delete(id);
-      } catch (error) {
-        actualizar(id, {
-          state: 'error',
-          reason: error instanceof Error ? error.message : 'No se pudo subir la foto.',
-        });
-      } finally {
-        enVuelo.current = null;
-      }
+  const bombear = useCallback(() => {
+    while (obreros.current < A_LA_VEZ && cola.current.length) {
+      obreros.current += 1;
+      void obrero();
     }
 
-    bombeando.current = false;
-    // Una sola recarga al final: con veinte fotos, recargar por cada una serian
-    // veinte peticiones de la ficha entera contra la misma conexion que sube.
-    if (subidas && montado.current) settledRef.current();
+    async function obrero() {
+      while (cola.current.length && montado.current) {
+        const id = cola.current.shift() as string;
+        const file = ficheros.current.get(id);
+        if (!file) continue;
+
+        actualizar(id, { state: 'uploading', progress: 0, reason: null });
+        let xhrPropio: XMLHttpRequest | null = null;
+        try {
+          const mensajes = await subirUna(
+            pathRef.current,
+            field,
+            file,
+            camposRef.current ?? {},
+            (percent) => actualizar(id, { progress: percent }),
+            (xhr) => {
+              // Cada obrero registra el suyo: con varios en vuelo, una sola
+              // referencia significaria abortar el de otro al desmontar.
+              if (xhrPropio) enVuelo.current.delete(xhrPropio);
+              xhrPropio = xhr;
+              enVuelo.current.add(xhr);
+            },
+          );
+          subidas.current += 1;
+          actualizar(id, { state: 'done', progress: 100, reason: null });
+          if (mensajes.length && montado.current) {
+            setAvisos((prev) => [
+              ...prev.filter((aviso) => aviso.id !== id),
+              { id, name: file.name, messages: mensajes },
+            ]);
+          }
+          // El fichero ya no hace falta: son megas retenidos en memoria.
+          ficheros.current.delete(id);
+        } catch (error) {
+          actualizar(id, {
+            state: 'error',
+            reason: error instanceof Error ? error.message : 'No se pudo subir la foto.',
+          });
+        } finally {
+          if (xhrPropio) enVuelo.current.delete(xhrPropio);
+        }
+      }
+
+      obreros.current -= 1;
+      // El ultimo en salir es el que recarga: con varios en paralelo, hacerlo
+      // por obrero serian tres recargas de la ficha entera casi a la vez.
+      if (obreros.current === 0 && subidas.current > 0 && montado.current) {
+        subidas.current = 0;
+        settledRef.current();
+      }
+    }
   }, [actualizar, field]);
 
   const add = useCallback(
@@ -329,7 +405,7 @@ export function useImageUploads({
       });
 
       setItems((prev) => [...prev, ...nuevos]);
-      void bombear();
+      bombear();
     },
     [bombear],
   );
@@ -340,7 +416,7 @@ export function useImageUploads({
       if (!ficheros.current.has(id)) return;
       actualizar(id, { state: 'pending', progress: 0, reason: null });
       cola.current.push(id);
-      void bombear();
+      bombear();
     },
     [actualizar, bombear],
   );
@@ -369,10 +445,25 @@ export function useImageUploads({
     });
   }, []);
 
+  /** Se cierra un aviso cuando ya se ha mirado la foto. */
+  const dismissWarning = useCallback((id: string) => {
+    setAvisos((prev) => prev.filter((aviso) => aviso.id !== id));
+  }, []);
+
   const subiendo = items.some(
     (item) => item.state === 'pending' || item.state === 'uploading',
   );
   const fallidas = items.filter((item) => item.state === 'error');
 
-  return { items, add, retry, dismiss, clearDone, subiendo, fallidas };
+  return {
+    items,
+    add,
+    retry,
+    dismiss,
+    clearDone,
+    subiendo,
+    fallidas,
+    avisos,
+    dismissWarning,
+  };
 }

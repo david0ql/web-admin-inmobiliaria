@@ -565,10 +565,11 @@ export interface PropertyFamily {
    */
   coverUrl: string | null;
   /**
-   * La galeria del proyecto, ordenada.
+   * La galeria del proyecto, ordenada por `position`.
    *
-   * Solo viene en la ficha publica por slug; `GET /families/:id` no la carga.
-   * El panel la pide a `GET /families/:id/images`.
+   * Solo la traen las fichas —`GET /families/:id` y la publica por slug—; el
+   * listado y el arbol no, porque unirla siempre seria pagar la galeria entera
+   * cada vez que alguien comprueba que un proyecto existe.
    */
   images?: MediaImage[];
   published: boolean;

@@ -12,7 +12,12 @@ import {
   X,
 } from 'lucide-react';
 import { ApiError, api, type ImageKind, type MediaImage } from '@/lib/api';
-import { ACCEPT_IMAGENES, useImageUploads, type UploadItem } from '@/lib/uploads';
+import {
+  ACCEPT_IMAGENES,
+  useImageUploads,
+  type UploadItem,
+  type UploadWarning,
+} from '@/lib/uploads';
 import { Alert, Badge, Button, Card, Modal } from '@/components/ui';
 import { cn } from '@/lib/utils';
 import { Visor } from './Visor';
@@ -359,6 +364,10 @@ export function Gallery({
             />
           )}
 
+          {subida.avisos.length > 0 && (
+            <Avisadas avisos={subida.avisos} onDismiss={subida.dismissWarning} />
+          )}
+
           {(total > 0 || nota) && (
             <p className="note">
               {nota ? `${nota} ` : ''}
@@ -665,6 +674,62 @@ function TileSubiendo({ item, onDismiss }: { item: UploadItem; onDismiss: () => 
         </div>
       </div>
     </li>
+  );
+}
+
+/**
+ * Lo que entró, pero conviene mirar.
+ *
+ * En ámbar y con «ya están subidas» por delante, no en rojo: son fotos
+ * GUARDADAS. Pintarlas como un rechazo hace que el asesor vuelva a subir una
+ * que ya está dentro y acabe duplicándola en la ficha, y no es un caso raro
+ * —medido sobre el inventario real, la API avisa el doble de veces de las que
+ * bloquea—. Por eso tampoco hay aquí ningún botón de reintentar.
+ */
+function Avisadas({
+  avisos,
+  onDismiss,
+}: {
+  avisos: UploadWarning[];
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <div className="rounded-md border border-amber-200 bg-amber-50 p-3">
+      <p className="text-sm font-medium text-amber-900">
+        {avisos.length === 1
+          ? 'Una foto ya está subida, pero mírala'
+          : `${avisos.length} fotos ya están subidas, pero míralas`}
+      </p>
+
+      <ul className="mt-2 flex list-none flex-col gap-2 p-0">
+        {avisos.map((aviso) => (
+          <li
+            key={aviso.id}
+            className="flex flex-wrap items-start gap-3 border-t border-amber-200 pt-2"
+          >
+            <div className="min-w-0 flex-1">
+              <p className="truncate text-xs font-medium text-amber-900" title={aviso.name}>
+                {aviso.name}
+              </p>
+              {aviso.messages.map((mensaje, i) => (
+                // Tal cual lo manda el servidor, uno por problema.
+                <p key={i} className="text-xs text-amber-800">
+                  {mensaje}
+                </p>
+              ))}
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              aria-label={`Ya he mirado ${aviso.name}`}
+              onClick={() => onDismiss(aviso.id)}
+            >
+              Ya la he mirado
+            </Button>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

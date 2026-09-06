@@ -3,7 +3,6 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ApiError,
   api,
-  type MediaImage,
   type Property,
   type PropertyFamily,
   type UnitTypeSummary,
@@ -42,12 +41,6 @@ interface Detail {
   unitTypes: UnitTypeSummary[];
   properties: Property[];
   families: PropertyFamily[];
-  /*
-    La galeria se pide aparte y no dentro de `GET /families/:id`: esa consulta
-    no la trae —la ficha por id no carga la relacion, solo la publica por
-    slug—, y hay un endpoint para ella.
-  */
-  images: MediaImage[];
 }
 
 export function ProjectDetail() {
@@ -59,14 +52,15 @@ export function ProjectDetail() {
 
   const { data, error, loading, reload } = useFetch<Detail>(
     async (signal) => {
-      const [family, unitTypes, properties, families, images] = await Promise.all([
+      const [family, unitTypes, properties, families] = await Promise.all([
+        // La ficha del proyecto ya trae su galeria ordenada, asi que no hace
+        // falta la peticion aparte a `/families/:id/images`.
         api.get<PropertyFamily>(`/families/${id}`, undefined, signal),
         api.get<UnitTypeSummary[]>(`/families/${id}/unit-types`, undefined, signal),
         api.get<Property[]>(`/families/${id}/properties`, undefined, signal),
         api.get<PropertyFamily[]>('/families', undefined, signal),
-        api.get<MediaImage[]>(`/families/${id}/images`, undefined, signal),
       ]);
-      return { family, unitTypes, properties, families, images };
+      return { family, unitTypes, properties, families };
     },
     [id],
   );
@@ -86,7 +80,7 @@ export function ProjectDetail() {
     );
   }
 
-  const { family, unitTypes, properties, images } = data;
+  const { family, unitTypes, properties } = data;
   const editable = can('ADMIN', 'MANAGER');
   const available = unitTypes.reduce((sum, unit) => sum + unit.available, 0);
   const prices = unitTypes.map((u) => u.minPrice).filter((p): p is number => p !== null);
@@ -192,7 +186,7 @@ export function ProjectDetail() {
         */}
         <Gallery
           path={`/families/${id}`}
-          images={images}
+          images={family.images ?? []}
           editable={editable}
           onChange={reload}
           title="Fotos del proyecto"
