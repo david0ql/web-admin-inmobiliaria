@@ -1,5 +1,6 @@
 import { Loader2 } from 'lucide-react';
 import { BrowserRouter, Navigate, Route, Routes } from 'react-router-dom';
+import { Suspense, lazy } from 'react';
 import { AuthProvider, useAuth } from './lib/auth';
 import { BranchProvider } from './lib/branch';
 import { Shell } from './components/Shell';
@@ -31,6 +32,14 @@ import { Profile } from './pages/Profile';
 import { AttendanceReminder } from './components/AttendanceReminder';
 import { AttendanceHistory } from './pages/AttendanceHistory';
 import { Attendance } from './pages/Attendance';
+
+/*
+  La pantalla de Hojas se carga aparte del resto del panel. Se lleva dentro a
+  Univer, que pesa mas que todo lo demas junto, y la abre quien va a montar un
+  consolidado — no quien entra a mirar la agenda. Es la unica pantalla que se
+  parte asi porque es la unica que lo justifica.
+*/
+const Hojas = lazy(() => import('./pages/Hojas').then((m) => ({ default: m.Hojas })));
 
 /**
  * Puerta de entrada al panel.
@@ -93,6 +102,23 @@ export default function App() {
               <Route path="agenda" element={<Calendar />} />
               <Route path="portales" element={<Portals />} />
               <Route path="informes" element={<Reports />} />
+              <Route
+                path="hojas"
+                element={
+                  <Suspense
+                    fallback={
+                      <div className="grid flex-1 place-items-center">
+                        <Loader2
+                          className="size-6 animate-spin text-muted-foreground"
+                          aria-label="Cargando"
+                        />
+                      </div>
+                    }
+                  >
+                    <Hojas />
+                  </Suspense>
+                }
+              />
               <Route path="asistencia" element={<Attendance />} />
               <Route path="equipo" element={<Team />} />
               <Route path="mi-cuenta" element={<Profile />} />

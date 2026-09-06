@@ -11,6 +11,7 @@ import {
   MapPinned,
   Menu,
   Settings,
+  Sheet as SheetIcon,
   UserCog,
   Users,
   X,
@@ -100,6 +101,13 @@ const MAIN: NavEntry[] = [
   // Un solo informe no es un desplegable: seria abrir un cajon para sacar una
   // cosa. Se queda de enlace suelto con el nombre que usa WASI.
   { to: '/informes', label: 'Reportes', icon: <BarChart3 /> },
+  /*
+    Las hojas van pegadas a Reportes y no dentro: son lo mismo mirado al reves.
+    Reportes responde las preguntas que ya sabemos que se hacen; Hojas es para
+    las que no, y de ahi que sea una hoja de calculo en blanco encima de los
+    mismos datos. Enlace suelto por la misma razon que Reportes.
+  */
+  { to: '/hojas', label: 'Hojas', icon: <SheetIcon /> },
 ];
 
 const MANAGE: NavEntry[] = [
