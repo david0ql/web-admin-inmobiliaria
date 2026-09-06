@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useState } from 'react';
 import { Bath, BedDouble, Car, ExternalLink, Ruler } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
@@ -44,6 +44,7 @@ import {
   number,
 } from '../lib/format';
 import { AVAILABILITY_TONE } from './Properties';
+import { Gallery } from '../components/media/Gallery';
 import { UnitTypeSelect } from './UnitTypes';
 
 interface Detail {
@@ -61,9 +62,6 @@ export function PropertyDetail() {
   const [assigning, setAssigning] = useState(false);
   const [publishing, setPublishing] = useState(false);
   const [linkingFamily, setLinkingFamily] = useState(false);
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
   const { data, error, loading, reload } = useFetch<Detail>(
     async (signal) => {
@@ -78,7 +76,13 @@ export function PropertyDetail() {
     [id],
   );
 
-  if (loading) return <Loading rows={8} />;
+  /*
+    El esqueleto solo la primera vez. `reload()` vuelve a poner `loading`, y
+    devolverlo aqui desmontaba la pantalla entera cada vez que se subia una
+    foto: la rejilla parpadeaba a gris y, peor, se perdia la lista de las que
+    habian fallado con su motivo, que es justo lo que hay que leer.
+  */
+  if (loading && !data) return <Loading rows={8} />;
   if (error || !data) {
     return (
       <PageBody>
@@ -89,48 +93,6 @@ export function PropertyDetail() {
 
   const { property, interests, publications, siblings } = data;
 
-  /**
-   * Sube fotos al servidor propio. Van en `multipart/form-data` porque el
-   * backend las recomprime: no se guardan enlaces a un CDN ajeno.
-   */
-  async function uploadPhotos(files: FileList | null) {
-    if (!files?.length) return;
-    setUploading(true);
-    setUploadError(null);
-    try {
-      const body = new FormData();
-      for (const file of Array.from(files)) body.append('files', file);
-
-      const res = await fetch(`/api/v1/properties/${id}/images`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${localStorage.getItem('serrano.access') ?? ''}` },
-        body,
-      });
-      const payload = (await res.json()) as {
-        message?: string | string[];
-        rejected?: { name: string; reason: string }[];
-      };
-      if (!res.ok) {
-        throw new ApiError(
-          res.status,
-          Array.isArray(payload.message)
-            ? payload.message.join('. ')
-            : (payload.message ?? 'No se pudieron subir las fotos'),
-        );
-      }
-      if (payload.rejected?.length) {
-        setUploadError(
-          `No se pudieron procesar: ${payload.rejected.map((r) => `${r.name} (${r.reason})`).join('; ')}`,
-        );
-      }
-      reload();
-    } catch (err) {
-      setUploadError(err instanceof ApiError ? err.message : 'No se pudieron subir las fotos.');
-    } finally {
-      setUploading(false);
-      if (fileInput.current) fileInput.current.value = '';
-    }
-  }
   const cover = property.images?.find((image) => image.isMain) ?? property.images?.[0];
   const editable = can('ADMIN', 'MANAGER', 'AGENT');
 
@@ -195,62 +157,14 @@ export function PropertyDetail() {
               </div>
             </Card>
 
-            {editable && (
-              <input
-                ref={fileInput}
-                type="file"
-                accept="image/*"
-                multiple
-                hidden
-                onChange={(e) => void uploadPhotos(e.target.files)}
-              />
-            )}
-
-            <Card
-              title={`Galería · ${property.images?.length ?? 0} fotos`}
-              action={
-                editable && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    loading={uploading}
-                    onClick={() => fileInput.current?.click()}
-                  >
-                    Subir fotos
-                  </Button>
-                )
-              }
-            >
-              <div className="flex flex-col gap-4">
-                {uploadError && <Alert tone="warn">{uploadError}</Alert>}
-                {(property.images?.length ?? 0) === 0 ? (
-                  <p className="note">
-                    Aún no hay fotos. Se guardan en el servidor y se sirven desde aquí.
-                  </p>
-                ) : (
-                  <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(120px,1fr))]">
-                    {property.images.map((image) => (
-                      <figure
-                        key={image.id}
-                        className="relative m-0 aspect-[4/3] overflow-hidden rounded-md border"
-                      >
-                        <img
-                          src={image.url}
-                          alt={image.description ?? ''}
-                          loading="lazy"
-                          className="size-full object-cover"
-                        />
-                        {image.isMain && (
-                          <figcaption className="absolute top-1.5 left-1.5">
-                            <Badge tone="ink">Portada</Badge>
-                          </figcaption>
-                        )}
-                      </figure>
-                    ))}
-                  </div>
-                )}
-              </div>
-            </Card>
+            <Gallery
+              path={`/properties/${id}`}
+              images={property.images ?? []}
+              editable={editable}
+              onChange={reload}
+              title="Fotos del inmueble"
+              vacio="Un inmueble sin fotos no se publica en ningún portal. Sube varias de una vez: se pueden arrastrar aquí desde el escritorio."
+            />
 
             {property.observations && (
               <Card title="Descripción">

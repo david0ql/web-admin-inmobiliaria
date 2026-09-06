@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react';
-import { ArrowDown, ArrowUp, Plus } from 'lucide-react';
+import { ArrowDown, ArrowUp, Plus, Ruler } from 'lucide-react';
 import {
   ApiError,
   api,
+  type MediaImage,
   type UnitType,
   type UnitTypeSummary,
 } from '../lib/api';
@@ -26,6 +27,7 @@ import {
   Tr,
 } from '../components/ui';
 import { area, moneyShort, number } from '../lib/format';
+import { Gallery } from '../components/media/Gallery';
 
 /**
  * Las tipologias de un proyecto: la tabla fija de «Tipo A, Tipo B, Tipo C» a la
@@ -60,6 +62,7 @@ export function UnitTypesCard({
   const [creating, setCreating] = useState(false);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState<UnitTypeSummary | null>(null);
+  const [imagenesDe, setImagenesDe] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [moving, setMoving] = useState(false);
 
@@ -67,6 +70,12 @@ export function UnitTypesCard({
   // clasificar, no una tipologia, y no se ordena ni se borra.
   const reales = summaries.filter((unit) => unit.id !== null);
   const hayAuto = reales.some((unit) => unit.kind === 'AUTO');
+  // El plano es lo que el comprador abre para decidir, asi que cuantas lo
+  // tienen es lo primero que hay que poder leer de esta pantalla.
+  const conPlano = reales.filter((unit) => planos(unit).length > 0).length;
+  const abierta = imagenesDe
+    ? (summaries.find((unit) => unit.id === imagenesDe) ?? null)
+    : null;
 
   /*
     Reordenar manda SIEMPRE la lista entera y no solo la fila movida: la API
@@ -158,22 +167,37 @@ export function UnitTypesCard({
                     <Td className="tabular w-[80px]">
                       {unit.code ?? <span className="note">—</span>}
                     </Td>
+                    {/*
+                      El plano va pegado al nombre y no en columna propia: como
+                      la celda arranca siempre a la misma altura, las miniaturas
+                      se leen igual de bien en vertical, y una columna mas
+                      empujaba «Editar» y «Borrar» fuera de la tarjeta.
+                    */}
                     <Td>
-                      <strong className="font-medium">{unit.name}</strong>
-                      {auto && (
-                        <span className="ml-2 align-middle">
-                          <Badge tone="blue">automática</Badge>
-                        </span>
-                      )}
-                      {unit.id === null && (
-                        <div className="note mt-0.5">
-                          Unidades del proyecto que todavía no pertenecen a ninguna
-                          tipología
+                      <div className="flex items-start gap-2">
+                        <CeldaPlano
+                          unit={unit}
+                          editable={editable}
+                          onAbrir={() => unit.id && setImagenesDe(unit.id)}
+                        />
+                        <div className="min-w-0">
+                          <strong className="font-medium">{unit.name}</strong>
+                          {auto && (
+                            <span className="ml-2 align-middle">
+                              <Badge tone="blue">automática</Badge>
+                            </span>
+                          )}
+                          {unit.id === null && (
+                            <div className="note mt-0.5">
+                              Unidades del proyecto que todavía no pertenecen a ninguna
+                              tipología
+                            </div>
+                          )}
+                          {unit.description && (
+                            <div className="note mt-0.5">{unit.description}</div>
+                          )}
                         </div>
-                      )}
-                      {unit.description && (
-                        <div className="note mt-0.5">{unit.description}</div>
-                      )}
+                      </div>
                     </Td>
                     <Td num hideSm>
                       {unit.bedrooms ?? '—'}
@@ -254,6 +278,17 @@ export function UnitTypesCard({
 
         {/* La explicacion va en la pantalla y no en un tooltip: quien ve una fila
             azulada tiene que entender ahi mismo por que no la puede tocar. */}
+        {reales.length > 0 && (
+          <p className="note border-t px-5 py-3">
+            {conPlano === reales.length
+              ? 'Todas las tipologías tienen plano.'
+              : conPlano === 0
+                ? 'Ninguna tipología tiene plano todavía. El plano es lo que el comprador mira para decidir entre el Tipo A y el Tipo B.'
+                : `${conPlano} de ${reales.length} tipologías tienen plano.`}{' '}
+            {editable && 'Pulsa el recuadro de la columna «Plano» para subirlo o cambiarlo.'}
+          </p>
+        )}
+
         {hayAuto && <p className="note border-t px-5 py-3">{AUTO_NOTA}</p>}
       </Card>
 
@@ -280,6 +315,15 @@ export function UnitTypesCard({
         />
       )}
 
+      {abierta?.id && (
+        <ImagenesTipologia
+          unit={abierta}
+          editable={editable}
+          onClose={() => setImagenesDe(null)}
+          onChange={onChange}
+        />
+      )}
+
       {deleting && (
         <DeleteUnitTypeModal
           unit={deleting}
@@ -291,6 +335,115 @@ export function UnitTypesCard({
         />
       )}
     </>
+  );
+}
+
+/** Los planos de una tipología, en el orden en que se enseñan. */
+function planos(unit: UnitTypeSummary): MediaImage[] {
+  return (unit.images ?? []).filter((image) => image.kind === 'FLOOR_PLAN');
+}
+
+/**
+ * Si esta tipología tiene plano, ahí mismo, sin abrirla.
+ *
+ * Es la razón de que esta columna exista. El plano es lo que el comprador abre
+ * para decidir entre el Tipo A y el Tipo B, así que la pregunta «¿cuáles me
+ * faltan por subir?» tiene que contestarse recorriendo la lista con la vista y
+ * no entrando en las tipologías una por una.
+ *
+ * La miniatura va a `contain` sobre blanco: un plano recortado a la caja pierde
+ * las cotas y la orientación, que es justo lo que se mira en él.
+ */
+function CeldaPlano({
+  unit,
+  editable,
+  onAbrir,
+}: {
+  unit: UnitTypeSummary;
+  editable: boolean;
+  onAbrir: () => void;
+}) {
+  // La fila de «sin clasificar» no es una tipología: no tiene nada que subir.
+  if (!unit.id) return null;
+
+  const laminas = planos(unit);
+  const otras = (unit.images ?? []).length - laminas.length;
+
+  if (laminas.length === 0) {
+    return (
+      <button
+        type="button"
+        onClick={onAbrir}
+        title={
+          editable
+            ? `Subir el plano de ${unit.name}`
+            : `${unit.name} no tiene plano`
+        }
+        className="flex h-9 w-12 flex-col items-center justify-center gap-0.5 rounded border border-dashed text-[0.5rem] leading-none text-muted-foreground transition-colors hover:border-solid hover:bg-secondary"
+      >
+        <Ruler className="size-3.5" aria-hidden />
+        Sin plano
+      </button>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={onAbrir}
+      title={`Ver el plano de ${unit.name}`}
+      className="relative block h-9 w-12 overflow-hidden rounded border bg-white transition-colors hover:border-primary"
+    >
+      <img
+        src={laminas[0].url}
+        alt={`Plano de ${unit.name}`}
+        loading="lazy"
+        decoding="async"
+        className="size-full object-contain p-0.5"
+      />
+      {/* Que haya más de una lámina —planta y alzado, o dos orientaciones— es
+          un dato distinto de tener plano, y también se lee de un vistazo. */}
+      {(laminas.length > 1 || otras > 0) && (
+        <span className="tabular absolute right-0 bottom-0 rounded-tl bg-black/70 px-1 text-[0.5625rem] font-bold text-white">
+          +{laminas.length - 1 + otras}
+        </span>
+      )}
+    </button>
+  );
+}
+
+/**
+ * Las imágenes de una tipología: sus planos y, si los hay, sus renders.
+ *
+ * En un modal y no en la propia fila porque la lista es para comparar las
+ * tipologías entre sí, y una rejilla de fotos abierta dentro de una fila la
+ * rompe. Se sube con la misma pieza que el proyecto y que el inmueble: lo
+ * único que cambia es que aquí lo que se sube por defecto es un plano.
+ */
+function ImagenesTipologia({
+  unit,
+  editable,
+  onClose,
+  onChange,
+}: {
+  unit: UnitTypeSummary;
+  editable: boolean;
+  onClose: () => void;
+  onChange: () => void;
+}) {
+  return (
+    <Modal title={`Imágenes de ${unit.name}`} onClose={onClose} wide>
+      <Gallery
+        path={`/unit-types/${unit.id}`}
+        images={unit.images ?? []}
+        editable={editable}
+        onChange={onChange}
+        title="Planos e imágenes"
+        vacio="Sube aquí el plano de esta tipología: es lo que el comprador abre para decidir entre el Tipo A y el Tipo B."
+        nota="Lo que subas aquí entra como plano. Si alguna es una foto —un render, el apartamento modelo— márcala como foto con el botón de la miniatura."
+        defaultKind="FLOOR_PLAN"
+      />
+    </Modal>
   );
 }
 

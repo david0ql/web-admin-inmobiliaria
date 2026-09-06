@@ -95,7 +95,13 @@ function sessionExpired() {
  */
 let refreshing: Promise<boolean> | null = null;
 
-async function refreshSession(): Promise<boolean> {
+/*
+  Se exporta porque la subida de fotos no puede pasar por `send`: necesita
+  XMLHttpRequest para dar progreso, y aun asi tiene que reintentar igual cuando
+  el token caduca — subir veinte fotos se lleva mas de los quince minutos que
+  dura un access token.
+*/
+export async function refreshSession(): Promise<boolean> {
   const refresh = tokens.refresh;
   if (!refresh) return false;
 
@@ -486,14 +492,45 @@ export type Availability = 'AVAILABLE' | 'RESERVED' | 'SOLD' | 'RENTED' | 'WITHD
 export type PublicationStatus = 'DRAFT' | 'ACTIVE' | 'OUTSTANDING' | 'INACTIVE';
 export type PropertyCondition = 'NEW' | 'USED' | 'PROJECT' | 'UNDER_CONSTRUCTION';
 
-export interface PropertyImage {
+/**
+ * Foto o plano.
+ *
+ * El plano no es una foto mas: es lo que el comprador de obra nueva abre
+ * primero de una tipologia, y la web lo enseña aparte del carrusel. En el panel
+ * decide en que recuadro cae cada imagen y que se puede ver de un vistazo en la
+ * lista de tipologias.
+ */
+export type ImageKind = 'PHOTO' | 'FLOOR_PLAN';
+
+/**
+ * Una imagen del sistema, viva donde viva.
+ *
+ * La API tiene tres tablas —inmueble, proyecto, tipologia— con exactamente
+ * estas columnas, asi que aqui es un solo tipo: las tres galerias del panel se
+ * gestionan con la misma pieza y no tendria sentido escribirlo tres veces.
+ *
+ * Los cuatro tamanos importan y no son intercambiables: `url` son 560 px y es
+ * lo unico que debe pintar una rejilla de miniaturas; `urlLarge` son 1600 y
+ * solo se pide al ampliar. Cargar el original donde basta la miniatura es lo
+ * que pone de rodillas una ficha con veinte fotos.
+ */
+export interface MediaImage {
   id: string;
   url: string;
+  urlMedium: string | null;
   urlLarge: string | null;
+  urlOriginal: string;
+  width: number | null;
+  height: number | null;
+  bytes: number | null;
+  description: string | null;
+  kind: ImageKind;
   position: number;
   isMain: boolean;
-  description: string | null;
 }
+
+/** La imagen de un inmueble. Es una `MediaImage` y no anade nada. */
+export type PropertyImage = MediaImage;
 
 export interface PropertyLabel {
   id: string;
@@ -519,7 +556,21 @@ export interface PropertyFamily {
   address: string | null;
   deliveryYear: number | null;
   totalUnits: number | null;
+  /**
+   * La portada vieja, escrita como texto suelto.
+   *
+   * Sigue existiendo como respaldo de los cinco proyectos que la tenian —apunta
+   * a la foto de uno de sus propios inmuebles— pero la portada de verdad es la
+   * de `images`. Se apaga sola segun se suben galerias.
+   */
   coverUrl: string | null;
+  /**
+   * La galeria del proyecto, ordenada.
+   *
+   * Solo viene en la ficha publica por slug; `GET /families/:id` no la carga.
+   * El panel la pide a `GET /families/:id/images`.
+   */
+  images?: MediaImage[];
   published: boolean;
   parentId: string | null;
   children?: PropertyFamily[];
@@ -587,6 +638,14 @@ export interface UnitTypeSummary {
   position: number;
   propertyId: string | null;
   coverUrl: string | null;
+  /**
+   * Las imagenes de la tipologia, planos incluidos.
+   *
+   * Vienen dentro del resumen a proposito: saber que tipologia tiene plano y
+   * cual no es lo primero que hay que ver en la lista, y pedirlo tipologia por
+   * tipologia serian N peticiones para pintar una columna.
+   */
+  images: MediaImage[];
 }
 
 export type ConsignmentStatus =

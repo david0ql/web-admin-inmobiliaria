@@ -3,6 +3,7 @@ import { Link, useNavigate, useParams } from 'react-router-dom';
 import {
   ApiError,
   api,
+  type MediaImage,
   type Property,
   type PropertyFamily,
   type UnitTypeSummary,
@@ -33,6 +34,7 @@ import {
 import { AVAILABILITY_LABEL, area, money, moneyShort, number } from '../lib/format';
 import { FAMILY_KIND_LABEL, FAMILY_STATUS_LABEL, ProjectForm } from './Projects';
 import { AVAILABILITY_TONE } from './Properties';
+import { Gallery } from '../components/media/Gallery';
 import { UnitTypeSelect, UnitTypesCard } from './UnitTypes';
 
 interface Detail {
@@ -40,6 +42,12 @@ interface Detail {
   unitTypes: UnitTypeSummary[];
   properties: Property[];
   families: PropertyFamily[];
+  /*
+    La galeria se pide aparte y no dentro de `GET /families/:id`: esa consulta
+    no la trae —la ficha por id no carga la relacion, solo la publica por
+    slug—, y hay un endpoint para ella.
+  */
+  images: MediaImage[];
 }
 
 export function ProjectDetail() {
@@ -51,18 +59,25 @@ export function ProjectDetail() {
 
   const { data, error, loading, reload } = useFetch<Detail>(
     async (signal) => {
-      const [family, unitTypes, properties, families] = await Promise.all([
+      const [family, unitTypes, properties, families, images] = await Promise.all([
         api.get<PropertyFamily>(`/families/${id}`, undefined, signal),
         api.get<UnitTypeSummary[]>(`/families/${id}/unit-types`, undefined, signal),
         api.get<Property[]>(`/families/${id}/properties`, undefined, signal),
         api.get<PropertyFamily[]>('/families', undefined, signal),
+        api.get<MediaImage[]>(`/families/${id}/images`, undefined, signal),
       ]);
-      return { family, unitTypes, properties, families };
+      return { family, unitTypes, properties, families, images };
     },
     [id],
   );
 
-  if (loading) return <Loading rows={8} />;
+  /*
+    El esqueleto solo la primera vez. `reload()` vuelve a poner `loading`, y
+    devolverlo aqui desmontaba la pantalla entera cada vez que se subia una
+    foto: la rejilla parpadeaba a gris y, peor, se perdia la lista de las que
+    habian fallado con su motivo, que es justo lo que hay que leer.
+  */
+  if (loading && !data) return <Loading rows={8} />;
   if (error || !data) {
     return (
       <PageBody>
@@ -71,7 +86,7 @@ export function ProjectDetail() {
     );
   }
 
-  const { family, unitTypes, properties } = data;
+  const { family, unitTypes, properties, images } = data;
   const editable = can('ADMIN', 'MANAGER');
   const available = unitTypes.reduce((sum, unit) => sum + unit.available, 0);
   const prices = unitTypes.map((u) => u.minPrice).filter((p): p is number => p !== null);
@@ -168,6 +183,22 @@ export function ProjectDetail() {
             onChange={reload}
           />
         </div>
+
+        {/*
+          La galería del proyecto va a lo ancho y no en la columna de la ficha:
+          en 320 px caben dos miniaturas por fila y esto es lo que el comprador
+          ve primero del proyecto —la fachada, la piscina, el render—, no un
+          dato más de la ficha técnica.
+        */}
+        <Gallery
+          path={`/families/${id}`}
+          images={images}
+          editable={editable}
+          onChange={reload}
+          title="Fotos del proyecto"
+          vacio="Fachada, zonas comunes, renders. Son las que ve quien abre el proyecto en la web, antes de mirar ninguna unidad."
+          nota="Estas fotos son del proyecto entero; las de cada apartamento van en su ficha."
+        />
 
         <Card title={`Unidades · ${properties.length}`} flush>
           {properties.length === 0 ? (
