@@ -100,6 +100,7 @@ export function ImagenesIA() {
               <EditorPrompt
                 key={prompt.data.active.version}
                 prompt={prompt.data}
+                rooms={(estado.data?.rooms ?? []).map((r) => r.value)}
                 onSaved={prompt.reload}
               />
             )}
@@ -126,72 +127,164 @@ function secciones(texto: string): string[] {
   return [...texto.matchAll(/^##\s+(.+)$/gm)].map((m) => m[1].trim());
 }
 
-/**
- * El trozo que fija el formato de la respuesta.
- *
- * Se localiza por su título en el texto de fábrica, no se guarda aparte: el
- * servidor guarda UN prompt entero y partirlo en dos campos aquí sería
- * inventarse una estructura que la API no tiene. Lo que sí se puede hacer —y es
- * lo que hace falta— es enseñar cuál es ese trozo y avisar si desaparece.
- */
-function armazon(texto: string): string | null {
-  const desde = texto.search(/^##\s+Formato de la respuesta/m);
-  return desde === -1 ? null : texto.slice(desde);
+/** El encabezado de la única sección que la agencia tiene que tocar. */
+const CABECERA_REGLAS = /^##\s+Reglas propias de la agencia[^\n]*\n/m;
+/** Lo que viene después de esa sección y vuelve a ser armazón. */
+const CABECERA_FORMATO = /^##\s+Formato de la respuesta/m;
+
+interface PromptPartido {
+  /** Todo lo de antes, incluido el encabezado de las reglas. */
+  cabecera: string;
+  /** Lo editable: las frases de la agencia. */
+  reglas: string;
+  /** El formato de la respuesta, que va DESPUÉS de lo editable. */
+  formato: string;
 }
 
-function EditorPrompt({ prompt, onSaved }: { prompt: PromptActivo; onSaved: () => void }) {
-  const [body, setBody] = useState(prompt.active.body);
+/**
+ * Parte el prompt en lo que se toca y lo que no.
+ *
+ * El servidor guarda UN texto, y esto no lo cambia: se recompone entero al
+ * guardar. Lo que hace es leer los marcadores que el propio fichero ya tiene
+ * —`## Reglas propias de la agencia` y `## Formato de la respuesta`— para
+ * enseñar por separado lo que la agencia puede escribir sin miedo.
+ *
+ * El detalle que se escapa mirándolo por encima: el bloque de formato va
+ * DESPUÉS del editable, así que no vale con «todo lo de detrás del marcador».
+ * Hay tres trozos, no dos.
+ *
+ * Si una versión guardada no trae los marcadores —porque alguien la reescribió
+ * entera—, devuelve `null` y la pantalla cae al editor de texto completo. Es
+ * preferible a partir por donde no toca.
+ */
+function partir(body: string): PromptPartido | null {
+  const reglas = CABECERA_REGLAS.exec(body);
+  const formato = body.search(CABECERA_FORMATO);
+  if (!reglas || formato === -1) return null;
+  const desde = reglas.index + reglas[0].length;
+  if (formato <= desde) return null;
+  return {
+    cabecera: body.slice(0, desde),
+    reglas: body.slice(desde, formato),
+    formato: body.slice(formato),
+  };
+}
+
+/**
+ * Los errores que hunden el análisis, con lo que costaron al medirlos.
+ *
+ * No son sospechas: `ia-prompt-lab` cayó en ellos en siete rondas sobre 62
+ * imágenes reales, y el número es lo que convierte el aviso en algo que se
+ * lee. «No inventes defectos» suena de lo más razonable; saber que bajó los
+ * problemas detectados de 127 a 6 es lo que hace que alguien lo borre.
+ *
+ * Avisan, no bloquean: el prompt es de la agencia. Pero un cambio que deja al
+ * modelo mudo no se nota mirando la pantalla —se nota en que ya nadie encuentra
+ * nada— y para entonces se ha pagado un montón de análisis vacíos.
+ */
+const TRAMPAS: { prueba: RegExp; aviso: string }[] = [
+  {
+    prueba: /\b(no inventes|no te inventes|solo si est[áa]s seguro|s[ée] breve|s[ée] prudente|no exageres|ninguno si|no seas exhaustivo)\b/i,
+    aviso:
+      'Pedirle prudencia suele callarlo del todo. Con «ninguno si la foto está bien», los problemas detectados cayeron de 127 a 6 sobre las mismas imágenes, y en otra versión salieron 0 problemas en 36 fotos que tenían cables cruzando la fachada y tomas torcidas. Si lo dejas, mide antes y después.',
+  },
+  {
+    prueba: /\b(vertical|horizontal|apaisad|resoluci[óo]n|nitidez|movida|borrosa|p[íi]xeles|orientaci[óo]n|exposici[óo]n|oscura|quemada)\w*/i,
+    aviso:
+      'La resolución, la orientación, la nitidez y la exposición ya las mide el código antes de llamar al modelo, y le llegan escritas. Pedírselas otra vez empeora el resultado: al exigirle marcar las verticales, los aciertos bajaron de 56 de 62 a 42 de 62, con 20 falsos positivos en fotos que eran apaisadas.',
+  },
+  {
+    prueba: /\b(s[ée] generoso|punt[úu]a alto|s[ée] benevolente|no seas duro|premia)\b/i,
+    aviso:
+      'Aflojar la escala de calidad la inutiliza: en una prueba, un álbum de 13 fotos salió entero entre 86 y 91, y con eso no se puede ordenar nada ni elegir portada.',
+  },
+  {
+    prueba: /\bmarca de agua\b/i,
+    aviso:
+      'La marca de agua tiene su propia sección arriba, en el armazón. Sin ella el modelo confundió «SERRANO INMOBILIARIA» con un teléfono de contacto en 47 de 62 imágenes. Si vas a añadir algo sobre eso, revisa que no contradiga lo de arriba.',
+  },
+];
+
+function EditorPrompt({
+  prompt,
+  rooms,
+  onSaved,
+}: {
+  prompt: PromptActivo;
+  /** Los roles que la API acepta; lo demás se guarda como «Otra», en silencio. */
+  rooms: string[];
+  onSaved: () => void;
+}) {
+  const partes = useMemo(() => partir(prompt.active.body), [prompt.active.body]);
+  /* Sin marcadores no hay dos mitades que enseñar: se edita el texto entero.
+     Y quien quiera tocar el armazón teniéndolos, puede pedirlo a mano. */
+  const [avanzado, setAvanzado] = useState(partes === null);
+  const [reglas, setReglas] = useState(partes?.reglas ?? '');
+  const [completo, setCompleto] = useState(prompt.active.body);
   const [notes, setNotes] = useState('');
   const [guardando, setGuardando] = useState(false);
   const [restaurando, setRestaurando] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  /** Lo que se va a mandar: el texto entero, siempre, se edite como se edite. */
+  const body =
+    avanzado || !partes ? completo : partes.cabecera + reglas + partes.formato;
+
   const sucio = body !== prompt.active.body;
   const largo = body.trim().length;
-
-  const marco = useMemo(
-    () => armazon(prompt.repositoryDefault),
-    [prompt.repositoryDefault],
-  );
-
-  /*
-    Los tres avisos que valen la pena, y por qué:
-
-    - Sin la palabra "json" en ningún sitio, el modelo devuelve prosa y el
-      servidor no puede guardar nada: fallan TODOS los análisis, ya pagados.
-    - Sin el bloque de formato, lo mismo por otro camino.
-    - Las secciones perdidas casi siempre son un borrado accidental al
-      reescribir un párrafo largo.
-
-    Ninguno bloquea el guardado: manda quien escribe. Pero verlos antes ahorra
-    una versión y una tanda de llamadas tiradas.
-  */
-  const avisos = useMemo(() => {
-    const lista: string[] = [];
-    if (!body.toLowerCase().includes('json')) {
-      lista.push(
-        'El prompt no menciona JSON en ningún sitio. Sin eso el modelo contesta en prosa y no se puede guardar ni un análisis.',
-      );
-    }
-    if (marco && !/^##\s+Formato de la respuesta/m.test(body)) {
-      lista.push(
-        'Ha desaparecido la sección «Formato de la respuesta», que es la que le dice al modelo con qué campos contestar.',
-      );
-    }
-    const actuales = secciones(body);
-    // La de formato ya tiene su propio aviso arriba: repetirla aquí sería
-    // decir dos veces lo mismo con otras palabras.
-    const perdidas = secciones(prompt.active.body).filter(
-      (s) => !actuales.includes(s) && !s.startsWith('Formato de la respuesta'),
-    );
-    if (perdidas.length) {
-      lista.push(`Han desaparecido estas secciones: ${perdidas.join(', ')}.`);
-    }
-    return lista;
-  }, [body, marco, prompt.active.body]);
-
   const corto = largo < PROMPT_MIN;
   const pasado = largo > PROMPT_MAX;
+
+  /** Lo que se revisa: en modo simple, solo lo que la persona ha escrito. */
+  const revisado = avanzado || !partes ? completo : reglas;
+
+  const avisos = useMemo(() => {
+    const lista: string[] = [];
+
+    for (const trampa of TRAMPAS) {
+      if (trampa.prueba.test(revisado)) lista.push(trampa.aviso);
+    }
+
+    /*
+      Un rol que no existe no da error: se guarda como «Otra» y nadie se entera.
+      Se buscan palabras en mayúsculas de cuatro letras o más para no perseguir
+      siglas sueltas ni el «JSON» del armazón.
+    */
+    const conocidos = new Set([...rooms, 'JSON', 'NO', 'SI', 'BLOCK', 'WARN']);
+    const inventados = [
+      ...new Set(
+        (revisado.match(/\b[A-ZÁÉÍÓÚÑ_]{4,}\b/g) ?? []).filter((p) => !conocidos.has(p)),
+      ),
+    ];
+    if (inventados.length) {
+      lista.push(
+        `${inventados.join(', ')} no ${inventados.length === 1 ? 'es una estancia' : 'son estancias'} que la API conozca. Lo que el modelo devuelva así se guardará como «Otra», sin avisar de nada.`,
+      );
+    }
+
+    // Lo que solo puede romperse tocando el armazón.
+    if (avanzado || !partes) {
+      if (!body.toLowerCase().includes('json')) {
+        lista.push(
+          'El prompt ya no menciona JSON. Sin eso el modelo contesta en prosa y no se puede guardar ni un análisis: se paga la llamada y no queda nada.',
+        );
+      }
+      if (!CABECERA_FORMATO.test(body)) {
+        lista.push(
+          'Ha desaparecido «Formato de la respuesta», que es donde viven el ejemplo JSON y la lista de estancias. Sin esa sección el validador no traga la respuesta.',
+        );
+      }
+      const actuales = secciones(body);
+      const perdidas = secciones(prompt.active.body).filter(
+        (s) => !actuales.includes(s) && !s.startsWith('Formato de la respuesta'),
+      );
+      if (perdidas.length) {
+        lista.push(`Han desaparecido estas secciones: ${perdidas.join(', ')}.`);
+      }
+    }
+
+    return lista;
+  }, [revisado, body, avanzado, partes, prompt.active.body, rooms]);
 
   async function guardar() {
     setGuardando(true);
@@ -243,43 +336,82 @@ function EditorPrompt({ prompt, onSaved }: { prompt: PromptActivo; onSaved: () =
         }
       >
         <div className="flex flex-col gap-3">
-          <p className="text-sm text-muted-foreground">
-            Esto es lo que se le dice al modelo antes de enseñarle las fotos. Escríbelo en
-            tus palabras: qué mirar en una foto de Bucaramanga, qué es una fachada
-            aceptable, qué no quieres que salga en la portada. Guardar no pisa nada —cada
-            guardado deja una versión— y desde el historial se vuelve atrás.
-          </p>
+          {partes && !avanzado ? (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Escribe aquí los criterios de la agencia: manías de la casa, lo que en
+                Bucaramanga importa y el modelo no sabe, lo que un portal exige. Una frase
+                por línea, empezando por un guion. Guardar no pisa nada —cada guardado deja
+                una versión— y desde el historial se vuelve atrás.
+              </p>
 
-          {/* La mitad que no conviene tocar. Se enseña, no se esconde: quien
-              edita tiene que saber qué parte es el contrato con el servidor. */}
-          {marco && (
-            <details className="rounded-md border bg-secondary/40">
-              <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-sm font-medium">
-                <Lock className="size-3.5" aria-hidden /> Qué parte es el armazón
-              </summary>
-              <div className="px-3 pb-3">
-                <p className="mb-2 text-xs text-muted-foreground">
-                  Este trozo es el que fija con qué campos contesta el modelo, y el
-                  servidor lo lee campo a campo para pintar la revisión. Se puede
-                  reescribir —el prompt es tuyo entero—, pero si se rompe deja de
-                  entenderse la respuesta y los análisis salen vacíos. Lo de arriba y lo de
-                  en medio es donde se afina sin miedo.
-                </p>
-                <pre className="max-h-80 overflow-auto text-xs whitespace-pre-wrap">
-                  {marco}
-                </pre>
-              </div>
-            </details>
+              <Textarea
+                value={reglas}
+                onChange={(e) => setReglas(e.target.value)}
+                /* `rows` no manda: el Textarea del sistema crece con su
+                   contenido. La altura de partida se fija con un mínimo. */
+                className="min-h-64 font-mono text-xs"
+                placeholder={
+                  '- Las fotos de piscina van siempre antes que las del gimnasio.\n- Si sale la portería del conjunto, que no vaya de portada.'
+                }
+              />
+
+              {/* Lo que sostiene todo lo demás. Se enseña —no se esconde— para
+                  que quien escribe arriba sepa contra qué está escribiendo. */}
+              <details className="rounded-md border bg-secondary/40">
+                <summary className="flex cursor-pointer items-center gap-1.5 px-3 py-2 text-sm font-medium">
+                  <Lock className="size-3.5" aria-hidden /> El armazón, que no hace falta
+                  tocar
+                </summary>
+                <div className="px-3 pb-3">
+                  <p className="mb-2 text-xs text-muted-foreground">
+                    Aquí viven el vocabulario de la casa, lo que el código ya mide y no hay
+                    que preguntarle al modelo, la sección de privacidad, la escala de
+                    calidad y —lo más delicado— el ejemplo de JSON y la lista de estancias,
+                    que son el contrato con el servidor. Si eso se rompe, la respuesta deja
+                    de entenderse y los análisis salen vacíos habiéndose pagado.
+                  </p>
+                  <pre className="max-h-80 overflow-auto text-xs whitespace-pre-wrap">
+                    {partes.cabecera}
+                    {partes.formato}
+                  </pre>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCompleto(body);
+                      setAvanzado(true);
+                    }}
+                    className="mt-2 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                  >
+                    Editarlo de todas formas
+                  </button>
+                </div>
+              </details>
+            </>
+          ) : (
+            <>
+              <p className="text-sm text-muted-foreground">
+                Estás editando el prompt entero, armazón incluido.{' '}
+                {partes && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setReglas(partir(completo)?.reglas ?? reglas);
+                      setAvanzado(false);
+                    }}
+                    className="underline underline-offset-2 hover:text-foreground"
+                  >
+                    Volver a editar solo mis reglas
+                  </button>
+                )}
+              </p>
+              <Textarea
+                value={completo}
+                onChange={(e) => setCompleto(e.target.value)}
+                className="min-h-96 font-mono text-xs"
+              />
+            </>
           )}
-
-          <Textarea
-            value={body}
-            onChange={(e) => setBody(e.target.value)}
-            /* `rows` no manda: el Textarea del sistema crece con su contenido
-               (`field-sizing-content`), así que la altura de partida se fija con
-               un mínimo. Sin esto, la pantalla de escribir arranca diminuta. */
-            className="min-h-96 font-mono text-xs"
-          />
 
           {avisos.map((aviso) => (
             <Alert key={aviso} tone="warn">
@@ -295,9 +427,9 @@ function EditorPrompt({ prompt, onSaved }: { prompt: PromptActivo; onSaved: () =
           )}
           {pasado && (
             <Alert tone="error">
-              Llevas {largo} caracteres y el tope son {PROMPT_MAX.toLocaleString('es-CO')}.
-              Por encima de eso el modelo deja de leerlo entero y se salta las
-              instrucciones del medio.
+              Llevas {largo.toLocaleString('es-CO')} caracteres y el tope son{' '}
+              {PROMPT_MAX.toLocaleString('es-CO')}. Por encima de eso el modelo deja de
+              leerlo entero y se salta las instrucciones del medio.
             </Alert>
           )}
 
@@ -309,7 +441,7 @@ function EditorPrompt({ prompt, onSaved }: { prompt: PromptActivo; onSaved: () =
             value={notes}
             maxLength={500}
             onChange={(e) => setNotes(e.target.value)}
-            placeholder="Ej.: más duro con las fotos oscuras y con la ropa tendida"
+            placeholder="Ej.: que las fotos de piscina no vayan de portada"
           />
 
           <div className="flex flex-wrap items-center gap-3">
@@ -322,10 +454,20 @@ function EditorPrompt({ prompt, onSaved }: { prompt: PromptActivo; onSaved: () =
             </Button>
             <span className="text-xs text-muted-foreground">
               {sucio
-                ? `${largo.toLocaleString('es-CO')} / ${PROMPT_MAX.toLocaleString('es-CO')}`
+                ? `${largo.toLocaleString('es-CO')} / ${PROMPT_MAX.toLocaleString('es-CO')} en total`
                 : 'Sin cambios sin guardar'}
             </span>
           </div>
+
+          {/* Dos pasadas idénticas del mismo prompt sobre las mismas fotos
+              dieron cuatro hallazgos de privacidad y cero. Con una sola no se
+              distingue una mejora de la suerte. */}
+          <Alert tone="warn">
+            El modelo no contesta igual dos veces: la misma pregunta sobre las mismas fotos
+            dio cuatro hallazgos de privacidad en una pasada y ninguno en la siguiente. Un
+            cambio no se puede juzgar con una prueba — lánzalo dos veces sobre las mismas
+            imágenes de muestra antes de darlo por bueno.
+          </Alert>
 
           <p className="note">
             La versión en uso se guardó el {dateTime(prompt.active.createdAt)}

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { ArrowDownUp, Check, EyeOff, Sparkles, TriangleAlert } from 'lucide-react';
+import { ArrowDownUp, EyeOff, Sparkles, TriangleAlert } from 'lucide-react';
 
 import { Alert, Badge, Button, Card, Modal } from '@/components/ui';
 import { ApiError, type PropertyImage } from '@/lib/api';
@@ -100,6 +100,9 @@ export function RevisionImagenes({
       distinto: completa && sugerido.some((id, i) => id !== actual[i]),
     };
   }, [album, images]);
+
+  /** Las que el modelo dice que ni siquiera son fotos del inmueble. */
+  const noSonFotos = [...porImagen.values()].filter((a) => a.quality <= 10).length;
 
   /** Las que no tienen veredicto: lo que costaría un análisis normal. */
   const nuevas = images.filter((img) => !porImagen.has(img.id));
@@ -247,6 +250,17 @@ export function RevisionImagenes({
           </Alert>
         )}
 
+        {/* Una galería entera de logos no es un problema de foto: es un
+            inmueble publicado sin fotos. Se cuenta arriba porque mirando
+            tarjeta a tarjeta no se ve que sean TODAS. */}
+        {noSonFotos > 0 && (
+          <Alert tone="error">
+            {noSonFotos === analizadas
+              ? 'Ninguna de las fotos analizadas es una foto del inmueble: son el logo, capturas o documentos. Este inmueble está publicado sin fotos de verdad.'
+              : `${noSonFotos} de las fotos analizadas no son fotos del inmueble: son el logo, capturas o documentos.`}
+          </Alert>
+        )}
+
         {album?.summary && <p className="text-sm">{album.summary}</p>}
 
         {/* Lo que falta no se ve mirando las fotos que hay, y es lo que más
@@ -292,6 +306,27 @@ export function RevisionImagenes({
             >
               Volver a verla
             </button>
+          </p>
+        )}
+
+        {/*
+          Lo que esta pantalla NO puede prometer, dicho antes de los resultados.
+
+          Medido sobre 62 imágenes reales: la detección de caras, placas y
+          documentos acierta alrededor de la mitad de las veces, y dos pasadas
+          idénticas del mismo prompt sobre las mismas fotos dieron cuatro
+          hallazgos y cero. Con esos números, una tarjeta sin hallazgos no
+          significa que la foto esté limpia. Si la pantalla dejara entender que
+          sí, nadie volvería a mirar — y en este inventario hay caras de
+          menores, un teléfono legible y matrículas, publicados hoy.
+        */}
+        {porImagen.size > 0 && (
+          <p className="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
+            Que una foto salga sin hallazgos quiere decir que la IA no encontró
+            nada, no que no lo haya. Encuentra alrededor de la mitad de las caras,
+            placas y documentos, y no siempre los mismos: sirve para levantar la
+            mano, no para dar una galería por revisada. Lo que salga marcado, en
+            cambio, míralo.
           </p>
         )}
 
@@ -380,11 +415,31 @@ function ordenar(images: PropertyImage[], sugerido: string[]): PropertyImage[] {
   return [...images].sort((a, b) => (puesto.get(a.id) ?? 999) - (puesto.get(b.id) ?? 999));
 }
 
-/** Escala de calidad: la nota cruda no dice nada sin una palabra al lado. */
-function calidad(valor: number): { texto: string; tono: 'green' | 'amber' | 'red' } {
-  if (valor >= 70) return { texto: 'Buena', tono: 'green' };
-  if (valor >= 40) return { texto: 'Justa', tono: 'amber' };
-  return { texto: 'Floja', tono: 'red' };
+/**
+ * Escala de calidad, con los tramos que el prompt le pide al modelo.
+ *
+ * No son cortes redondos elegidos aquí: están escritos en
+ * `defaults/analisis-imagenes.md` y el modelo puntúa contra ellos. Inventarse
+ * otros en la pantalla hace que un 72 se lea «Buena» cuando lo que se le pidió
+ * decir es «se ve bien, pero no llama a nadie».
+ *
+ * El tramo de abajo es el que más importa y por eso tiene nombre propio: 0-10
+ * no es una foto fea, es que NO es una foto del inmueble —el logo de la
+ * agencia, una captura, un documento—. Meterlo en el mismo cubo que «floja»
+ * escondería el caso que más dinero vale: galerías enteras que son solo el
+ * logo, en inmuebles que están publicados.
+ */
+function calidad(valor: number): {
+  texto: string;
+  tono: 'green' | 'amber' | 'red' | 'neutral';
+  noEsFoto: boolean;
+} {
+  if (valor <= 10) return { texto: 'No es una foto', tono: 'red', noEsFoto: true };
+  if (valor <= 35) return { texto: 'Inservible', tono: 'red', noEsFoto: false };
+  if (valor <= 55) return { texto: 'Floja', tono: 'amber', noEsFoto: false };
+  if (valor <= 75) return { texto: 'Aceptable', tono: 'neutral', noEsFoto: false };
+  if (valor <= 90) return { texto: 'Buena', tono: 'green', noEsFoto: false };
+  return { texto: 'Excepcional', tono: 'green', noEsFoto: false };
 }
 
 /** Lo que el modelo marcó como "esto no puede salir a una página pública". */
@@ -445,12 +500,25 @@ export function FichaVeredicto({
           <Badge tone={nota.tono}>
             {nota.texto} · {veredicto.quality}
           </Badge>
+          {/* `usable` es del modelo y es más fiable que el número: se enseña
+              aunque la nota no haya bajado del todo. */}
+          {!veredicto.usable && !nota.noEsFoto && <Badge tone="red">No publicable</Badge>}
           {/* Ser buena foto y servir de portada son dos preguntas distintas:
               un baño impecable puntúa 90 de calidad y 5 de portada. */}
           {veredicto.coverScore >= 60 && (
             <Badge tone="green">Sirve de portada · {veredicto.coverScore}</Badge>
           )}
         </div>
+
+        {/* Esto no es una foto fea: es que no hay inmueble en la imagen. Se
+            dice con todas las letras porque la acción no es "repítela", es
+            "esta galería no tiene fotos de verdad". */}
+        {nota.noEsFoto && (
+          <p className="text-xs font-medium text-red-700">
+            No parece una foto del inmueble: puede ser el logo de la agencia, una
+            captura o un documento.
+          </p>
+        )}
 
         {/* Lo más serio de la pantalla: la ficha es una página que Google
             indexa. Va primero y en rojo. */}
@@ -466,9 +534,12 @@ export function FichaVeredicto({
 
         {veredicto.issues.length > 0 ? (
           <ul className="flex list-none flex-col gap-1 p-0">
-            {veredicto.issues.map((issue) => (
+            {/* `issues` es texto libre escrito por el modelo, no un enum: no
+                hay tipo que etiquetar ni por el que filtrar, y por eso la clave
+                es la posición y no el contenido. */}
+            {veredicto.issues.map((issue, i) => (
               <li
-                key={issue}
+                key={i}
                 className="flex items-start gap-1.5 text-xs text-muted-foreground"
               >
                 <TriangleAlert
@@ -482,18 +553,19 @@ export function FichaVeredicto({
           </ul>
         ) : (
           privado.length === 0 && (
-            <p className="flex items-center gap-1.5 text-xs text-muted-foreground">
-              <Check className="size-3.5 shrink-0 text-emerald-600" aria-hidden /> Sin
-              problemas
-            </p>
+            /* "Sin hallazgos", no "sin problemas", y sin visto verde: lo
+               segundo se lee como "revisado y correcto", que es justo lo que
+               esto NO puede prometer. La advertencia entera está arriba, una
+               sola vez, en la cabecera de la tarjeta. */
+            <p className="text-xs text-muted-foreground">Sin hallazgos</p>
           )
         )}
 
         {/* Lo que hay que hacer, que es distinto de lo que está mal. */}
         {veredicto.fixes.length > 0 && (
           <ul className="flex list-none flex-col gap-0.5 p-0">
-            {veredicto.fixes.map((fix) => (
-              <li key={fix} className="text-xs">
+            {veredicto.fixes.map((fix, i) => (
+              <li key={i} className="text-xs">
                 → {fix}
               </li>
             ))}
