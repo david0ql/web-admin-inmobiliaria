@@ -141,6 +141,13 @@ const MANAGE: NavEntry[] = [
       // el enlace no existe para nadie mas que el administrador.
       { to: '/sedes', label: 'Sedes', roles: ['ADMIN'] },
       { to: '/agenda-config', label: 'Horarios' },
+      /*
+        Afinar el prompt cambia como se juzgan las fotos de TODO el inventario,
+        y las reglas tecnicas deciden que fichero entra: es configuracion de la
+        empresa, no de una oficina. Por eso cuelga de aqui y solo lo ve quien
+        manda sobre la agencia entera.
+      */
+      { to: '/imagenes-ia', label: 'Revisión de fotos', roles: ['ADMIN', 'DIRECTOR'] },
     ],
   },
   /*

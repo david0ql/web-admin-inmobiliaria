@@ -22,6 +22,7 @@ import { Reports } from './pages/Reports';
 import { BookingSettings } from './pages/BookingSettings'
 import { Conversations } from './pages/Conversations'
 import { AssistantRules } from './pages/AssistantRules'
+import { ImagenesIA } from './pages/ImagenesIA'
 import { Translations } from '@/pages/Translations';
 import { HomeShowcase } from './pages/HomeShowcase'
 import { Team } from './pages/Team';
@@ -100,6 +101,7 @@ export default function App() {
               <Route path="agenda-config" element={<BookingSettings />} />
               <Route path="conversaciones" element={<Conversations />} />
               <Route path="asistente" element={<AssistantRules />} />
+              <Route path="imagenes-ia" element={<ImagenesIA />} />
               <Route path="portada" element={<HomeShowcase />} />
               <Route path="textos" element={<Translations />} />
             </Route>
