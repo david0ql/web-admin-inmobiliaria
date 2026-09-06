@@ -45,6 +45,7 @@ import {
 } from '../lib/format';
 import { AVAILABILITY_TONE } from './Properties';
 import { Gallery } from '../components/media/Gallery';
+import { RevisionImagenes } from '../components/imagenes-ia/RevisionImagenes';
 import { UnitTypeSelect } from './UnitTypes';
 
 interface Detail {
@@ -164,6 +165,15 @@ export function PropertyDetail() {
               onChange={reload}
               title="Fotos del inmueble"
               vacio="Un inmueble sin fotos no se publica en ningún portal. Sube varias de una vez: se pueden arrastrar aquí desde el escritorio."
+            />
+
+            {/* Debajo de la galeria y no dentro: lo de arriba es el inventario
+                —lo que hay— y esto es una opinion sobre ello. Quien no haya
+                lanzado el analisis no ve mas que el boton con su coste. */}
+            <RevisionImagenes
+              propertyId={id!}
+              images={property.images ?? []}
+              onOrderApplied={reload}
             />
 
             {property.observations && (
