@@ -259,11 +259,21 @@ export function RevisionImagenes({
 
         {album?.summary && <p className="text-sm">{album.summary}</p>}
 
-        {/* Lo que falta no se ve mirando las fotos que hay, y es lo que más
-            visitas cuesta: nadie compra sin ver la cocina y el baño. */}
+        {/*
+          Lo que falta no se ve mirando las fotos que hay, y es lo que más
+          visitas cuesta: nadie compra sin ver la cocina y el baño.
+
+          No es opinión del modelo: lo calcula el servidor restando las
+          estancias que quedaron clasificadas, y teniendo en cuenta lo que ese
+          inmueble puede tener —en un lote la cocina no falta, no existe—. Se
+          dice porque cambia cuánto fiarse: el modelo llegó a decir que faltaba
+          la cocina en álbumes donde acababa de clasificar una.
+        */}
         {album && album.missing.length > 0 && (
           <div className="flex flex-wrap items-center gap-1.5 text-sm">
-            <span className="text-muted-foreground">No hay foto de:</span>
+            <span className="text-muted-foreground">
+              Sin foto de <span className="text-xs">(lo cuenta el sistema, no la IA)</span>:
+            </span>
             {album.missing.map((m) => (
               <Badge key={m} tone="amber">
                 {rooms.get(m) ?? m}
