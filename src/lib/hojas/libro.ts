@@ -41,6 +41,11 @@ const HOLGURA_COLUMNAS = 8;
 
 /** El ancho de columna segun lo que va a caer dentro. */
 function ancho(columna: Columna): number {
+  // Un uuid son 36 caracteres que nadie lee: esta ahi para que una formula
+  // cruce dos hojas, no para mirarlo. Estrecho, y que se vea entero al pinchar
+  // la celda. Una columna asi de ancha la primera es lo que se lleva la vista
+  // al abrir la hoja, y no dice nada.
+  if (columna.tipo === 'identificador') return 90;
   if (columna.tipo === 'dinero') return 140;
   if (columna.tipo === 'fecha') return 110;
   if (columna.tipo === 'numero' || columna.tipo === 'si-no') return 90;
@@ -155,7 +160,15 @@ export function estilos(): Record<string, unknown> {
       bd: { b: { s: 1, cl: { rgb: '#cbd5e1' } } },
     },
   };
-  for (const tipo of ['texto', 'numero', 'dinero', 'fecha', 'si-no'] as TipoColumna[]) {
+  const TIPOS: TipoColumna[] = [
+    'texto',
+    'identificador',
+    'numero',
+    'dinero',
+    'fecha',
+    'si-no',
+  ];
+  for (const tipo of TIPOS) {
     const formato = FORMATO[tipo];
     salida[estiloColumna(tipo)] = formato ? { n: { pattern: formato } } : {};
   }

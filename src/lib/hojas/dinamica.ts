@@ -243,25 +243,21 @@ export function calcular(origen: Conjunto, def: Dinamica): ResultadoDinamica {
   };
 }
 
-/** Una columna que identifica a la fila: agrupar por ella no agrupa nada. */
-function esIdentificador(clave: string): boolean {
-  return clave === 'id' || clave.endsWith('Id') || clave.endsWith('_id');
-}
-
 /**
  * Las columnas que sirven para agrupar.
  *
  * Fuera el dinero: cada inmueble tiene un precio distinto, asi que agrupar por
- * el devolveria una fila por inmueble y ninguna informacion. Fuera tambien los
- * identificadores, por lo mismo y ademas sin que el resultado se pueda leer —
- * la hoja de inmuebles trae un `Id` que solo esta ahi para cruzarla con las de
- * relaciones y citas. Las fechas si entran, porque se agrupan por mes.
+ * el devolveria una fila por inmueble y ninguna informacion. Fuera por lo mismo
+ * los identificadores, que ademas darian un resultado ilegible — la hoja de
+ * inmuebles trae un `Id` que solo esta ahi para cruzarla con relaciones y
+ * citas. Cuales son lo dice la API con el tipo `identificador`, no una lista de
+ * nombres nuestra: asi el dia que aparezca una hoja nueva sus claves ya vienen
+ * marcadas y aqui no hay que acordarse de nada. Las fechas si entran, porque se
+ * agrupan por mes.
  */
 export function dimensionesPosibles(conjunto: Conjunto): Columna[] {
   return conjunto.columnas.filter(
-    (c) =>
-      !esIdentificador(c.clave) &&
-      (c.tipo === 'texto' || c.tipo === 'si-no' || c.tipo === 'fecha'),
+    (c) => c.tipo === 'texto' || c.tipo === 'si-no' || c.tipo === 'fecha',
   );
 }
 

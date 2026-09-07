@@ -7,8 +7,16 @@
  * escriben una sola vez y no una por origen.
  */
 
-/** De que tipo es una columna. Decide alineacion, formato y si se puede sumar. */
-export type TipoColumna = 'texto' | 'numero' | 'dinero' | 'fecha' | 'si-no';
+/**
+ * De que tipo es una columna. Decide alineacion, formato y si se puede sumar.
+ *
+ * `identificador` es un uuid de cruce: se pinta como texto porque lo es, pero
+ * se lleva aparte para poder estrecharlo y para que no aparezca entre las
+ * dimensiones de la dinamica — agrupar por un identificador devuelve una fila
+ * por registro. Lo marca la API, que es quien sabe cuales son.
+ */
+export type TipoColumna =
+  'texto' | 'identificador' | 'numero' | 'dinero' | 'fecha' | 'si-no';
 
 export interface Columna {
   /** La clave con la que viene el valor en cada fila. */

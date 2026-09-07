@@ -14,7 +14,14 @@ import type { Columna, Conjunto, Fila, TipoColumna, Valor } from './tipos';
  */
 
 /** El tipo de columna tal y como lo nombra la API. */
-type TipoApi = 'texto' | 'numero' | 'moneda' | 'fecha' | 'fechaHora' | 'booleano';
+type TipoApi =
+  | 'texto'
+  | 'identificador'
+  | 'numero'
+  | 'moneda'
+  | 'fecha'
+  | 'fechaHora'
+  | 'booleano';
 
 interface ColumnaApi {
   key: string;
@@ -77,6 +84,7 @@ const MAX_PETICIONES = 10;
  */
 const TIPO: Record<TipoApi, TipoColumna> = {
   texto: 'texto',
+  identificador: 'identificador',
   numero: 'numero',
   moneda: 'dinero',
   fecha: 'fecha',
@@ -85,6 +93,8 @@ const TIPO: Record<TipoApi, TipoColumna> = {
 };
 
 function columna(col: ColumnaApi): Columna {
+  // Un tipo que la API estrene mañana cae en texto: se vera algo razonable en
+  // vez de una hoja rota mientras el panel no se haya desplegado todavia.
   return { clave: col.key, rotulo: col.label, tipo: TIPO[col.tipo] ?? 'texto' };
 }
 
