@@ -46,6 +46,7 @@ import {
 import { AVAILABILITY_TONE } from './Properties';
 import { Gallery } from '../components/media/Gallery';
 import { RevisionImagenes } from '../components/imagenes-ia/RevisionImagenes';
+import { RetoqueFotos } from '../components/retoque/RetoqueFotos';
 import { UnitTypeSelect } from './UnitTypes';
 
 interface Detail {
@@ -174,6 +175,16 @@ export function PropertyDetail() {
               propertyId={id!}
               images={property.images ?? []}
               onOrderApplied={reload}
+            />
+
+            {/* Y esto debajo de la revision, que es lo que dice si la foto esta
+                bien: primero el diagnostico y despues el tratamiento. Si el
+                servidor no tiene ninguno de los tres modulos, no se pinta. */}
+            <RetoqueFotos
+              propertyId={id!}
+              images={property.images ?? []}
+              editable={editable}
+              onChange={reload}
             />
 
             {property.observations && (

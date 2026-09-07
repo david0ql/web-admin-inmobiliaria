@@ -9,6 +9,7 @@ import {
   Star,
   Trash2,
   Upload,
+  Wand2,
   X,
 } from 'lucide-react';
 import { ApiError, api, type ImageKind, type MediaImage } from '@/lib/api';
@@ -517,10 +518,22 @@ function Tile({
         acciones se ve siempre, y ahí abajo el distintivo quedaba tapado por los
         botones justo en la foto que más importa señalar.
       */}
-      {(plano || image.isMain) && (
+      {(plano || image.isMain || image.aiEdited) && (
         <span className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
           {plano && <Badge tone="blue">Plano</Badge>}
           {image.isMain && <Badge tone="ink">Portada</Badge>}
+          {/*
+            Va aqui, en el inventario, y no solo en la pantalla de retoque. Una
+            foto generada no se distingue mirandola —para eso se genera—, asi
+            que si el distintivo vive solo donde se retoca, todo el que no pase
+            por alli la da por real: el asesor que la manda por WhatsApp, el que
+            la sube a un portal y el comprador que llega a la casa.
+          */}
+          {image.aiEdited && (
+            <Badge tone="amber">
+              <Wand2 className="size-3" aria-hidden /> IA
+            </Badge>
+          )}
         </span>
       )}
 

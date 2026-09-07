@@ -6,6 +6,7 @@ import {
   Ruler,
   Star,
   Trash2,
+  Wand2,
 } from 'lucide-react';
 import { Badge, Button, Dialog, DialogContent, DialogTitle } from '@/components/ui';
 import type { MediaImage } from '@/lib/api';
@@ -75,6 +76,14 @@ export function Visor({
             </span>
           ) : null}
           {image.isMain && <Badge tone="ink">Portada</Badge>}
+          {/* A tamano grande es donde alguien decide si esta foto vale para el
+              portal, y por tanto donde mas falta hace saber que lo que esta
+              mirando lo genero un modelo. */}
+          {image.aiEdited && (
+            <Badge tone="amber">
+              <Wand2 className="size-3" aria-hidden /> Retocada con IA
+            </Badge>
+          )}
         </DialogTitle>
 
         <div className="relative flex items-center justify-center rounded-md bg-secondary">

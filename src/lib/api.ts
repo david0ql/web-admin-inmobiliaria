@@ -527,6 +527,22 @@ export interface MediaImage {
   kind: ImageKind;
   position: number;
   isMain: boolean;
+  /**
+   * Lo que se publica de esta foto salio de un retoque generativo.
+   *
+   * Opcional porque el modulo de retoque de la API se esta escribiendo ahora y
+   * los servidores que no lo tengan no van a mandar el campo. Ausente se lee
+   * como `false`, que es lo correcto: la inmensa mayoria de las 6.306 fotos del
+   * inventario son fotos.
+   *
+   * Viaja en la imagen y no en el modulo de retoque a proposito. El problema
+   * que este campo resuelve —un catalogo donde no se distingue lo real de lo
+   * generado— no esta en la pantalla de retoque, esta en todas las demas: la
+   * rejilla, el visor y cualquier sitio donde alguien mire una foto sin haber
+   * abierto nunca esa pantalla.
+   */
+  aiEdited?: boolean;
+  aiEditedAt?: string | null;
 }
 
 /** La imagen de un inmueble. Es una `MediaImage` y no anade nada. */
