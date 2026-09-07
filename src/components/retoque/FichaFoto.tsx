@@ -18,6 +18,7 @@ import {
   dolares,
   estadoRevelado,
   KIND_TONO,
+  precioRetoque,
   retoque as apiRetoque,
   superficiePerdida,
   type Encuadre,
@@ -689,10 +690,7 @@ function BloqueRetoque({
         {/* El coste, en el mismo bloque que el botón y antes de él. */}
         <p className="text-xs text-muted-foreground">
           {previo
-            ? costeEnPalabras({
-                ...estado,
-                retoqueUsd: previo.costeOrientativoUsd ?? estado.retoqueUsd,
-              })
+            ? costeEnPalabras(estado, previo.costeOrientativoUsd)
             : 'Escribe qué quieres y te digo qué haría y cuánto cuesta, antes de gastar nada.'}
           {gastado > 0 && ` · ya se ha gastado ${dolares(gastado)} en esta foto`}
         </p>
@@ -706,8 +704,10 @@ function BloqueRetoque({
           onClick={() => onPedir(texto, asumida)}
         >
           <Wand2 />
-          {previo?.costeOrientativoUsd
-            ? `Retocar por ${dolares(previo.costeOrientativoUsd)}`
+          {/* La cifra en el propio botón, no solo encima: es la última cosa
+              que se lee antes de gastar. Si no se sabe, no se inventa. */}
+          {(previo?.costeOrientativoUsd ?? precioRetoque(estado)) !== null
+            ? `Retocar por ${dolares((previo?.costeOrientativoUsd ?? precioRetoque(estado))!)}`
             : 'Retocar esta foto'}
         </Button>
       </div>

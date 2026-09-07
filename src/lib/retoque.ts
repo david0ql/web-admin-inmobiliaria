@@ -366,7 +366,7 @@ export interface EstadoRetoque {
   /**
    * Lo que cuesta un retoque, ORIENTATIVO, y lo que cuesta un análisis.
    *
-   * Van juntos porque separados no dicen nada: «0,245 USD» no le sitúa el gasto
+   * Van juntos porque separados no dicen nada: «0,25 USD» no le sitúa el gasto
    * a nadie y «unas quinientas veces lo que cuesta analizarla» sí. Y salen los
    * dos del mismo sitio para que el día que se cambie de modelo se muevan a la
    * vez — una comparación en la que solo se actualiza una mitad miente más que
@@ -375,11 +375,31 @@ export interface EstadoRetoque {
    * Orientativo de verdad: el coste real depende del tamaño de salida (0,182
    * USD a 1584×1056 y 0,245 a 2128×1424). El de cada retoque ya hecho viene en
    * su `costUsd`, calculado con los tokens que devolvió el proveedor.
+   *
+   * Los nombres viejos siguen leyéndose, y no es por pereza. Este par ya se
+   * llamó de dos maneras distintas según el endpoint, y la consecuencia fue
+   * justo la peor posible: el campo no se encontraba, la pantalla caía con
+   * elegancia al importe a secas y NADA daba error en ningún lado — se perdía
+   * en silencio la única cifra que hace que el precio signifique algo. Aceptar
+   * los dos nombres cuesta una línea y convierte un renombrado en un no-evento.
    */
-  retoqueUsd: number | null;
-  analisisUsd: number | null;
+  costeOrientativoUsd?: number | null;
+  costeAnalisisUsd?: number | null;
+  /** Como se llamaron antes las dos de arriba. */
+  retoqueUsd?: number | null;
+  analisisUsd?: number | null;
   moneda: string;
   kinds: { value: RetouchKind; label: string }[];
+}
+
+/** Lo que cuesta un retoque, se llame como se llame en este servidor. */
+export function precioRetoque(estado: EstadoRetoque): number | null {
+  return estado.costeOrientativoUsd ?? estado.retoqueUsd ?? null;
+}
+
+/** Lo que cuesta un análisis, con el que se arma el múltiplo. */
+export function precioAnalisis(estado: EstadoRetoque): number | null {
+  return estado.costeAnalisisUsd ?? estado.analisisUsd ?? null;
 }
 
 export const KIND_TONO: Record<RetouchKind, 'green' | 'amber' | 'red'> = {
@@ -526,13 +546,19 @@ export function dolares(valor: number | string): string {
  * el asesor lanza todos los días, así que es la única escala que ya tiene
  * calibrada. Si no se sabe lo que cuesta un análisis, no se inventa.
  */
-export function costeEnPalabras(estado: EstadoRetoque): string {
-  if (estado.retoqueUsd === null) return 'coste desconocido';
-  const cifra = dolares(estado.retoqueUsd);
-  if (!estado.analisisUsd || estado.analisisUsd <= 0) return `${cifra} orientativos`;
-  const veces = Math.round(estado.retoqueUsd / estado.analisisUsd);
-  if (veces < 2) return `${cifra} orientativos`;
-  return `${cifra} orientativos · unas ${veces} veces lo que cuesta analizarla`;
+export function costeEnPalabras(
+  estado: EstadoRetoque,
+  /** El precio de esta llamada concreta, si la previsualización lo dijo. */
+  precio: number | null = null,
+): string {
+  const retoque = precio ?? precioRetoque(estado);
+  if (retoque === null) return 'coste desconocido';
+  const cifra = `${dolares(retoque)} orientativos`;
+  const analisis = precioAnalisis(estado);
+  if (!analisis || analisis <= 0) return cifra;
+  const veces = Math.round(retoque / analisis);
+  if (veces < 2) return cifra;
+  return `${cifra} · unas ${veces} veces lo que cuesta analizarla`;
 }
 
 /** «1,50:1» a partir del número. Es lo que hace discutible un «muy apaisada». */
