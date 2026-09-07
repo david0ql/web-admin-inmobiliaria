@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import { ArrowDownUp, EyeOff, Sparkles, TriangleAlert } from 'lucide-react';
 
 import { Alert, Badge, Button, Card, Modal } from '@/components/ui';
-import { ApiError, type PropertyImage } from '@/lib/api';
+import { ApiError, api, type Agent, type PropertyImage } from '@/lib/api';
 import { useFetch } from '@/lib/useFetch';
 import { useAuth } from '@/lib/auth';
 import { dateTime } from '@/lib/format';
@@ -40,7 +40,7 @@ export function RevisionImagenes({
   /** La galería de al lado tiene que repintarse cuando se aplica el orden. */
   onOrderApplied: () => void;
 }) {
-  const { can } = useAuth();
+  const { can, user } = useAuth();
   const [confirmando, setConfirmando] = useState<'nuevas' | 'todas' | null>(null);
   const [analizando, setAnalizando] = useState(false);
   const [aplicando, setAplicando] = useState(false);
@@ -49,6 +49,9 @@ export function RevisionImagenes({
   /* Lo que el servidor NO volvió a cobrar en la última tanda. Se dice porque
      es la prueba de que no se pagó dos veces lo mismo. */
   const [ahorradas, setAhorradas] = useState<number | null>(null);
+  /* Lo que se acaba de revisar, por id de análisis. Se pisa lo cargado en vez
+     de recargarlo todo: la respuesta del PATCH ya trae la fila entera. */
+  const [revisados, setRevisados] = useState<Record<string, AnalisisImagen>>({});
 
   const estado = useFetch<EstadoImagenesIA>((signal) => imagenesIA.estado(signal), []);
   const revision = useFetch<RevisionInmueble>(
@@ -72,10 +75,10 @@ export function RevisionImagenes({
   const porImagen = useMemo(() => {
     const mapa = new Map<string, AnalisisImagen>();
     for (const a of revision.data?.images ?? []) {
-      if (!mapa.has(a.propertyImageId)) mapa.set(a.propertyImageId, a);
+      if (!mapa.has(a.propertyImageId)) mapa.set(a.propertyImageId, revisados[a.id] ?? a);
     }
     return mapa;
-  }, [revision.data]);
+  }, [revision.data, revisados]);
 
   const album = revision.data?.album ?? null;
 
@@ -114,6 +117,40 @@ export function RevisionImagenes({
 
   /** Las que el modelo dice que ni siquiera son fotos del inmueble. */
   const noSonFotos = [...porImagen.values()].filter((a) => a.quality <= 10).length;
+
+  /*
+    Quién descartó cada marca. La API guarda el id del asesor, y el nombre es
+    justo lo que da valor al registro —"revisada por Ana el martes" es una
+    garantía; un booleano no—, así que hay que resolverlo. Se pide solo cuando
+    hay algún descarte de otra persona: en la inmensa mayoría de fichas no hay
+    ninguno y no se gasta una petición en nada.
+  */
+  const ajenos = [...porImagen.values()].some(
+    (a) => a.privacyReviewedByAgentId && a.privacyReviewedByAgentId !== user?.id,
+  );
+  const equipo = useFetch<Agent[]>(
+    (signal) =>
+      ajenos ? api.get<Agent[]>('/agents', undefined, signal) : Promise.resolve([]),
+    [ajenos],
+  );
+  const nombreDe = (id: string | null): string | null => {
+    if (!id) return null;
+    if (id === user?.id) return 'ti';
+    const quien = (equipo.data ?? []).find((a) => a.id === id);
+    return quien ? (quien.fullName ?? `${quien.firstName} ${quien.lastName ?? ''}`.trim()) : null;
+  };
+
+  async function revisarPrivacidad(analisis: AnalisisImagen, dismissed: boolean) {
+    setError(null);
+    try {
+      const fila = await imagenesIA.revisarPrivacidad(analisis.id, dismissed);
+      setRevisados((previos) => ({ ...previos, [analisis.id]: fila }));
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudo guardar la revisión.',
+      );
+    }
+  }
 
   /** Las que no tienen veredicto: lo que costaría un análisis normal. */
   const nuevas = images.filter((img) => !porImagen.has(img.id));
@@ -383,6 +420,8 @@ export function RevisionImagenes({
                   propuesto={propuesta.sugerido.length ? indice + 1 : null}
                   esPortada={album?.coverImageId === img.id}
                   room={rooms.get(veredicto.room) ?? veredicto.room}
+                  revisor={nombreDe(veredicto.privacyReviewedByAgentId)}
+                  onRevisar={(dismissed) => void revisarPrivacidad(veredicto, dismissed)}
                 />
               );
             })}
@@ -502,6 +541,8 @@ export function FichaVeredicto({
   propuesto,
   esPortada,
   room,
+  revisor,
+  onRevisar,
 }: {
   url: string;
   veredicto: AnalisisImagen;
@@ -509,15 +550,26 @@ export function FichaVeredicto({
   propuesto: number | null;
   esPortada: boolean;
   room: string;
+  /** Quién descartó la marca, ya resuelto a nombre. */
+  revisor: string | null;
+  onRevisar: (dismissed: boolean) => void;
 }) {
   const nota = calidad(veredicto.quality);
   const privado = privacidad(veredicto);
+  /* `0` no es «no hay», es «no se preguntó»: en los análisis viejos el campo no
+     existía. Por eso solo se enseña cuando cuenta algo. */
+  const marcos = veredicto.privacy?.framedPeople ?? 0;
+  const contados =
+    marcos > 0 ? `${marcos} ${marcos === 1 ? 'portarretrato' : 'portarretratos'}` : null;
 
   return (
     <li
       className={cn(
         'overflow-hidden rounded-md border',
-        (privado.length > 0 || !veredicto.usable) && 'border-red-300',
+        /* Una marca ya revisada deja de gritar: alguien la miró. Pero el
+           borde vuelve si se reabre. */
+        ((privado.length > 0 && !veredicto.privacyDismissed) || !veredicto.usable) &&
+          'border-red-300',
       )}
     >
       <div className="relative aspect-[4/3] bg-secondary">
@@ -563,14 +615,50 @@ export function FichaVeredicto({
         )}
 
         {/* Lo más serio de la pantalla: la ficha es una página que Google
-            indexa. Va primero y en rojo. */}
-        {privado.length > 0 && (
-          <p className="flex items-start gap-1.5 text-xs font-medium text-red-700">
-            <EyeOff className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+            indexa. Va primero y en rojo — salvo que alguien ya la haya mirado
+            y haya dicho que no era nada, que entonces baja de tono pero NO
+            desaparece: sigue estando ahí y se puede volver a marcar. */}
+        {privado.length > 0 && !veredicto.privacyDismissed && (
+          <div className="flex flex-col gap-1.5">
+            <p className="flex items-start gap-1.5 text-xs font-medium text-red-700">
+              <EyeOff className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>
+                Míralo antes de publicar: se ven {privado.join(', ')}.
+                {contados !== null ? ` Cuenta ${contados}.` : ''}
+                {veredicto.privacy?.notes ? ` ${veredicto.privacy.notes}` : ''}
+              </span>
+            </p>
+            {/* Un clic, porque el falso positivo es frecuente —un cartel de
+                cumpleaños, un globo— y revisarlo no puede ser un trámite. */}
+            <button
+              type="button"
+              onClick={() => onRevisar(true)}
+              className="self-start rounded-md border px-2 py-1 text-xs hover:bg-secondary"
+            >
+              Lo he mirado, no es nada
+            </button>
+          </div>
+        )}
+
+        {privado.length > 0 && veredicto.privacyDismissed && (
+          <p className="flex flex-wrap items-center gap-1.5 text-xs text-muted-foreground">
+            <EyeOff className="size-3.5 shrink-0" aria-hidden />
+            {/* El nombre es lo único que este registro aporta: una marca sin
+                revisar dice "no encontró"; ésta dice "una persona lo miró". */}
+            {/* Se dice QUÉ se revisó, no solo que se revisó: sin eso, quien lo
+                lea dentro de un mes no sabe sobre qué decidió esa persona. */}
             <span>
-              No debería publicarse así: se ven {privado.join(', ')}.
-              {veredicto.privacy?.notes ? ` ${veredicto.privacy.notes}` : ''}
+              Se marcó «{privado.join(', ')}» y {revisor ? `${revisor === 'ti' ? 'lo miraste tú' : `lo miró ${revisor}`}` : 'alguien lo miró'}
+              {veredicto.privacyReviewedAt ? ` el ${dateTime(veredicto.privacyReviewedAt)}` : ''}
+              : no era nada.
             </span>
+            <button
+              type="button"
+              onClick={() => onRevisar(false)}
+              className="underline underline-offset-2 hover:text-foreground"
+            >
+              Volver a marcarla
+            </button>
           </p>
         )}
 

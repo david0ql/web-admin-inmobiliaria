@@ -35,6 +35,15 @@ export interface PrivacyFlags {
   screens: boolean;
   /** La nomenclatura de la fachada o el rótulo del portal. */
   address?: boolean;
+  /**
+   * Cuántos retratos con personas contó el modelo.
+   *
+   * No decide nada —la bandera sigue siendo `faces`—, pero «cuenta 3
+   * portarretratos» es mucho más accionable que un sí/no, sobre todo cuando lo
+   * marcado resulta ser un globo de cumpleaños. En análisis anteriores viene
+   * `0`, y ese cero es «no se preguntó», no «no hay».
+   */
+  framedPeople?: number;
   notes: string | null;
 }
 
@@ -57,6 +66,17 @@ export interface AnalisisImagen {
   fixes: string[];
   privacy: PrivacyFlags;
   usable: boolean;
+  /**
+   * Alguien miró la marca de privacidad y dijo que no era nada.
+   *
+   * Las tres van juntas —la base lo impone con un CHECK— porque lo que vale de
+   * este registro no es el descarte, es saber quién lo dijo y cuándo. Reabrir
+   * las devuelve a nulo: una marca reabierta está sin revisar, y dejar el
+   * nombre haría creer que sigue habiendo alguien detrás.
+   */
+  privacyDismissed: boolean;
+  privacyReviewedAt: string | null;
+  privacyReviewedByAgentId: string | null;
   promptVersion: number;
   /**
    * Huella del texto que produjo ESTE resultado.
@@ -300,6 +320,10 @@ export const imagenesIA = {
   /** Esto SÍ llama al modelo y se paga por imagen. */
   analizar: (propertyId: string, opciones: { imageIds?: string[]; force?: boolean }) =>
     api.post<ResultadoAnalisis>(`${BASE}/properties/${propertyId}/analyze`, opciones),
+
+  /** «Lo he mirado y no es nada», o lo contrario. Quién lo dice sale del token. */
+  revisarPrivacidad: (analysisId: string, dismissed: boolean) =>
+    api.patch<AnalisisImagen>(`${BASE}/analyses/${analysisId}/privacy`, { dismissed }),
 
   prompt: (signal?: AbortSignal) =>
     api.get<PromptActivo>(`${BASE}/prompt`, undefined, signal),
