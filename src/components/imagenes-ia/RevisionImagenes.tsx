@@ -146,6 +146,19 @@ export function RevisionImagenes({
       const fila = await imagenesIA.revisarPrivacidad(analisis.id, dismissed);
       setRevisados((previos) => ({ ...previos, [analisis.id]: fila }));
     } catch (err) {
+      /*
+        El 404 se dice aparte porque no es un fallo de quien pulsa: significa
+        que el panel va por delante del servidor y esa ruta todavía no existe.
+        Con el mensaje crudo de la API —"Cannot PATCH /..."— el asesor cree que
+        rompió algo. Así, además, subir esta pantalla antes que la API deja de
+        ser un despliegue acoplado: el botón se explica solo.
+      */
+      if (err instanceof ApiError && err.status === 404) {
+        setError(
+          'Este servidor todavía no guarda la revisión de las marcas de privacidad. La marca se queda como está; vuelve a intentarlo cuando esté actualizado.',
+        );
+        return;
+      }
       setError(
         err instanceof ApiError ? err.message : 'No se pudo guardar la revisión.',
       );
