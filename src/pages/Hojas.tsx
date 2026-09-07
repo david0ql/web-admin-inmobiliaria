@@ -9,6 +9,7 @@ import * as almacen from '../lib/hojas/almacen';
 import { cargar, catalogo, type Ficha } from '../lib/hojas/datos';
 import { calcular, dimensionesPosibles, medidasPosibles } from '../lib/hojas/dinamica';
 import { descargarXlsx, nombreFichero } from '../lib/hojas/exportar';
+import type { NombreEnCastellano } from '../lib/hojas/formulas-es';
 import {
   AGREGADO_ROTULO,
   type Agregado,
@@ -88,6 +89,12 @@ export function Hojas() {
   const libro = useRef<LibroApi>(null);
   const [exportando, setExportando] = useState(false);
   const [errorExporte, setErrorExporte] = useState<string | null>(null);
+  /*
+    El ultimo nombre de funcion en castellano que alguien ha escrito. Se guarda
+    uno solo: si sigue escribiendo formulas en castellano es el mismo aviso, y
+    apilarlos empujaria la hoja hacia abajo justo mientras trabaja.
+  */
+  const [enCastellano, setEnCastellano] = useState<NombreEnCastellano | null>(null);
 
   // --- traer los datos -----------------------------------------------------
 
@@ -308,6 +315,22 @@ export function Hojas() {
 
         {errorExporte && <ErrorNote>{errorExporte}</ErrorNote>}
 
+        {enCastellano && (
+          <Alert
+            tone="warn"
+            action={
+              <Button variant="outline" size="sm" onClick={() => setEnCastellano(null)}>
+                Entendido
+              </Button>
+            }
+          >
+            Escribiste <code>{enCastellano.escrito}</code> y aquí esa función se llama{' '}
+            <code>{enCastellano.ingles}</code>. Los nombres van en inglés aunque el resto
+            esté en español; con el nombre en castellano la celda queda en{' '}
+            <code>#NAME?</code>.
+          </Alert>
+        )}
+
         <Dinamicas
           origenes={fichas
             .filter((f) => datos[f.nombre])
@@ -345,7 +368,12 @@ export function Hojas() {
               }
             >
               <div className="min-h-0 flex-1">
-                <Libro ref={libro} hojas={hojas} propias={propias.current} />
+                <Libro
+                  ref={libro}
+                  hojas={hojas}
+                  propias={propias.current}
+                  onNombreEnCastellano={setEnCastellano}
+                />
               </div>
             </Suspense>
           )}

@@ -6,6 +6,7 @@ import UniverPresetSheetsCoreEsES from '@univerjs/preset-sheets-core/locales/es-
 import '@univerjs/preset-sheets-core/lib/index.css';
 
 import type { CeldasPropias } from '@/lib/hojas/almacen';
+import { nombreEnCastellano, type NombreEnCastellano } from '@/lib/hojas/formulas-es';
 import { celdasPropias, construirHoja, estilos } from '@/lib/hojas/libro';
 import type { IStyleData, Nullable } from '@univerjs/presets';
 import type { Conjunto } from '@/lib/hojas/tipos';
@@ -40,13 +41,21 @@ interface Props {
   propias: Record<string, CeldasPropias>;
   /** Se llama cuando algo cambia en el libro, para que la pantalla lo guarde. */
   onCambio?: () => void;
+  /**
+   * Se llama cuando alguien escribe una funcion con su nombre en castellano.
+   *
+   * Univer solo entiende los nombres en ingles, asi que esa formula va a dar
+   * `#NAME?`. Se avisa en el momento de escribirla y no despues, porque es
+   * cuando la persona todavia se acuerda de lo que queria hacer.
+   */
+  onNombreEnCastellano?: (aviso: NombreEnCastellano) => void;
   ref?: Ref<LibroApi>;
 }
 
 /** El identificador del libro. Uno solo: aqui no hay varios abiertos a la vez. */
 const UNIDAD = 'serrano-hojas';
 
-export function Libro({ hojas, propias, onCambio, ref }: Props) {
+export function Libro({ hojas, propias, onCambio, onNombreEnCastellano, ref }: Props) {
   const contenedor = useRef<HTMLDivElement>(null);
   /*
     La fachada de Univer y el tamano del bloque de datos de cada hoja. Van en
@@ -136,9 +145,36 @@ export function Libro({ hojas, propias, onCambio, ref }: Props) {
       aqui.
     */
     api.current = univerAPI;
-    const suscripcion = onCambio
-      ? univerAPI.addEvent(univerAPI.Event.SheetValueChanged, () => onCambio())
-      : undefined;
+
+    /*
+      Un solo oyente para las dos cosas que la pantalla necesita saber de una
+      edicion: que hay algo que guardar, y si lo que se acaba de escribir usa
+      una funcion con su nombre en castellano. Se mira la formula que se tecleo,
+      sin esperar a que el motor devuelva `#NAME?`: si el nombre esta en
+      castellano el error es seguro, y avisar antes ahorra el susto.
+    */
+    const suscripcion = univerAPI.addEvent(univerAPI.Event.SheetValueChanged, (params) => {
+      onCambio?.();
+      if (!onNombreEnCastellano) return;
+
+      /*
+        Se miran SOLO los rangos que el evento dice que han cambiado, no el
+        libro entero: `save()` serializa las cinco hojas con sus 10.000 filas y
+        hacerlo en cada edicion se notaria al teclear. Aqui son una o dos celdas.
+      */
+      for (const rango of params.effectedRanges ?? []) {
+        for (const fila of rango.getFormulas()) {
+          for (const formula of fila) {
+            if (!formula) continue;
+            const aviso = nombreEnCastellano(formula);
+            if (aviso) {
+              onNombreEnCastellano(aviso);
+              return;
+            }
+          }
+        }
+      }
+    });
 
     return () => {
       /*
