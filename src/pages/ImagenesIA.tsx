@@ -264,6 +264,21 @@ function EditorPrompt({
 
     // Lo que solo puede romperse tocando el armazón.
     if (avanzado || !partes) {
+      /*
+        Los cinco booleanos de privacidad. El validador del servidor los exige
+        todos, así que un prompt que no los nombre devuelve respuestas que no
+        pasan la validación: doce análisis de doce se cayeron con un 503 el día
+        que `address` entró en el validador antes que en el texto. Es un fallo
+        que se paga entero y no deja nada.
+      */
+      const banderas = ['faces', 'plates', 'documents', 'screens', 'address'];
+      const sinNombrar = banderas.filter((b) => !body.includes(b));
+      if (sinNombrar.length) {
+        lista.push(
+          `El prompt ya no nombra ${sinNombrar.join(', ')}, y el servidor exige los cinco campos de privacidad (faces, plates, documents, screens, address). Si el modelo no los devuelve, el análisis falla entero después de haberse pagado.`,
+        );
+      }
+
       if (!body.toLowerCase().includes('json')) {
         lista.push(
           'El prompt ya no menciona JSON. Sin eso el modelo contesta en prosa y no se puede guardar ni un análisis: se paga la llamada y no queda nada.',
