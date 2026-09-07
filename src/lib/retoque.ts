@@ -138,6 +138,22 @@ export interface Corte {
   /** Lo que mide el código de franja plana en ese mismo borde. */
   medido: number;
   /**
+   * Lo que se va a recortar DE VERDAD, y por tanto lo único que se dibuja y se
+   * manda. `porcion` y `medido` son para poder explicar y para poder dudar.
+   *
+   * No es lo mismo que `medido` y la diferencia no es pequeña: la galería pinta
+   * las fotos con `object-cover` sobre una caja más cuadrada que un 3:2, así que
+   * el navegador vuelve a recortar por su cuenta. Midiéndolo, quitar el 35 % de
+   * abajo de un 3:2 hacía que el navegador se llevara además el 24 % del ancho
+   * —desaparecían la pared de la izquierda y el final de la barra de la
+   * cocina—. El servidor acota cada borde a lo que cabe sin provocar eso: en un
+   * 3:2 son unos 14 puntos.
+   *
+   * Dibujar `medido` y mandar `medido` sería enseñar un recorte y aplicar otro,
+   * que es exactamente el fallo que esta pantalla existe para evitar.
+   */
+  aplicable: number;
+  /**
    * El código confirma la franja.
    *
    * Ojo con leer esto como «se aplica solo»: en la pantalla significa «este
@@ -185,8 +201,10 @@ export function marco(cortes: Corte[]): {
   izquierda: number;
   derecha: number;
 } {
+  /* `aplicable` y no `porcion`: es lo que el servidor va a recortar. Con
+     `porcion` la previsualización enseñaría un recorte y saldría otro. */
   const de = (borde: Borde) =>
-    cortes.find((c) => c.borde === borde)?.porcion ?? 0;
+    cortes.find((c) => c.borde === borde)?.aplicable ?? 0;
   return {
     arriba: de('ARRIBA'),
     abajo: de('ABAJO'),
@@ -261,6 +279,15 @@ export function estadoRevelado(image: {
 export type RetouchKind = 'REVELADO' | 'ALTERACION' | 'OCULTA_DEFECTO';
 
 export type RetouchStatus =
+  /**
+   * Pedido y pagado, pero el proveedor todavía está dibujando.
+   *
+   * El POST vuelve en menos de un segundo con este estado porque la edición
+   * tarda unos 87 segundos, y una petición de minuto y medio no sobrevive al
+   * `proxy_read_timeout` de nginx: el asesor vería un error de una llamada que
+   * se cobró y que salió bien.
+   */
+  | 'PROCESANDO'
   | 'PENDIENTE'
   | 'APLICADO'
   | 'DESCARTADO'
@@ -334,18 +361,25 @@ export interface ResumenRetoque {
 
 /** Lo que `/image-ai/status` dice del retoque. El resto lo lee `imagenes-ia`. */
 export interface EstadoRetoque {
+  /** Sin clave del proveedor es `false` y no se ofrece el botón. */
   enabled: boolean;
-  kinds: { value: RetouchKind; label: string }[];
   /**
-   * Lo que cuesta analizar una foto, para poder situar el precio del retoque.
+   * Lo que cuesta un retoque, ORIENTATIVO, y lo que cuesta un análisis.
    *
-   * Opcional porque la API no lo publicaba al escribir esto. Sin él se enseña
-   * el importe a secas: «0,25 USD» no le dice a un asesor si es caro, pero
-   * inventarse el múltiplo sería peor que no darlo. Medido por quien lo cobra,
-   * el retoque anda por 0,245 USD y el análisis por 0,0005 — unas quinientas
-   * veces—, y por eso la frase importa: la intuición dice diez, no quinientas.
+   * Van juntos porque separados no dicen nada: «0,245 USD» no le sitúa el gasto
+   * a nadie y «unas quinientas veces lo que cuesta analizarla» sí. Y salen los
+   * dos del mismo sitio para que el día que se cambie de modelo se muevan a la
+   * vez — una comparación en la que solo se actualiza una mitad miente más que
+   * no ponerla.
+   *
+   * Orientativo de verdad: el coste real depende del tamaño de salida (0,182
+   * USD a 1584×1056 y 0,245 a 2128×1424). El de cada retoque ya hecho viene en
+   * su `costUsd`, calculado con los tokens que devolvió el proveedor.
    */
-  costeAnalisisUsd?: number | null;
+  retoqueUsd: number | null;
+  analisisUsd: number | null;
+  moneda: string;
+  kinds: { value: RetouchKind; label: string }[];
 }
 
 export const KIND_TONO: Record<RetouchKind, 'green' | 'amber' | 'red'> = {
@@ -423,6 +457,16 @@ export const retoque = {
    * clasificacion de una frase anterior, y el aviso de «esto altera la
    * realidad» acabaria hablando de un texto que ya no esta.
    */
+  /**
+   * Deshacer el recorte: la lista vacía devuelve la foto entera.
+   *
+   * No hace falta otra ruta y no es un truco: el recorte se guarda como caja y
+   * se regenera desde el negativo, así que recortar dos veces no acumula y
+   * deshacer devuelve la foto completa.
+   */
+  deshacerRecorte: (imageId: string) =>
+    api.post<MediaImage>(`${BASE}/images/${imageId}/crop`, { cortes: [] }),
+
   previoRetoque: (instruction: string) =>
     api.post<PrevioRetoque>(`${BASE}/retouch/preview`, { instruction }),
 
@@ -482,16 +526,13 @@ export function dolares(valor: number | string): string {
  * el asesor lanza todos los días, así que es la única escala que ya tiene
  * calibrada. Si no se sabe lo que cuesta un análisis, no se inventa.
  */
-export function costeEnPalabras(
-  costeUsd: number | null,
-  costeAnalisisUsd: number | null,
-): string {
-  if (costeUsd === null) return 'coste desconocido';
-  const cifra = dolares(costeUsd);
-  if (!costeAnalisisUsd || costeAnalisisUsd <= 0) return cifra;
-  const veces = Math.round(costeUsd / costeAnalisisUsd);
-  if (veces < 2) return cifra;
-  return `${cifra} · unas ${veces} veces lo que cuesta analizarla`;
+export function costeEnPalabras(estado: EstadoRetoque): string {
+  if (estado.retoqueUsd === null) return 'coste desconocido';
+  const cifra = dolares(estado.retoqueUsd);
+  if (!estado.analisisUsd || estado.analisisUsd <= 0) return `${cifra} orientativos`;
+  const veces = Math.round(estado.retoqueUsd / estado.analisisUsd);
+  if (veces < 2) return `${cifra} orientativos`;
+  return `${cifra} orientativos · unas ${veces} veces lo que cuesta analizarla`;
 }
 
 /** «1,50:1» a partir del número. Es lo que hace discutible un «muy apaisada». */

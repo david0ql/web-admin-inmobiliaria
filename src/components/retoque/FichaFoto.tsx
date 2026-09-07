@@ -21,6 +21,7 @@ import {
   retoque as apiRetoque,
   superficiePerdida,
   type Encuadre,
+  type EstadoRetoque,
   type PrevioRetoque,
   type PropuestaImagen,
   type Retoque,
@@ -54,8 +55,7 @@ export function FichaFoto({
   total,
   encuadre,
   propuesta,
-  retoqueHabilitado,
-  costeAnalisisUsd,
+  estadoRetoque,
   editable,
   onClose,
   onCambio,
@@ -68,10 +68,11 @@ export function FichaFoto({
   encuadre: Encuadre | null;
   /** Las dos listas, ya partidas por el servidor. */
   propuesta: PropuestaImagen | null;
-  /** `/image-ai/status` dice si hay clave del proveedor. Sin ella no se ofrece. */
-  retoqueHabilitado: boolean;
-  /** Para poder decir «cuesta N veces analizarla». Sin él, solo la cifra. */
-  costeAnalisisUsd: number | null;
+  /**
+   * Lo que `/image-ai/status` dice del retoque: si hay clave del proveedor y
+   * los dos costes con los que se arma la frase. `null` si el módulo no está.
+   */
+  estadoRetoque: EstadoRetoque | null;
   editable: boolean;
   onClose: () => void;
   /** La rejilla y la galería de arriba tienen que repintarse. */
@@ -94,7 +95,9 @@ export function FichaFoto({
   */
   const generando =
     historial?.some(
-      (r) => r.status === 'PENDIENTE' && !r.retouchedSnapshot && !r.error,
+      (r) =>
+        r.status === 'PROCESANDO' ||
+        (r.status === 'PENDIENTE' && !r.retouchedSnapshot && !r.error),
     ) ?? false;
   useEffect(() => {
     if (!generando) return;
@@ -108,7 +111,7 @@ export function FichaFoto({
   }, [generando, image.id]);
 
   useEffect(() => {
-    if (!retoqueHabilitado) return;
+    if (!estadoRetoque?.enabled) return;
     let vivo = true;
     apiRetoque
       .retoquesDe(image.id)
@@ -123,7 +126,7 @@ export function FichaFoto({
     return () => {
       vivo = false;
     };
-  }, [image.id, retoqueHabilitado]);
+  }, [image.id, estadoRetoque?.enabled]);
 
   function fallo(err: unknown, porDefecto: string) {
     /* El 404 se dice aparte: no es que quien pulsa haya roto nada, es que el
@@ -155,7 +158,10 @@ export function FichaFoto({
   const ajustes = image.develop?.resumen ?? [];
   /* Solo hay cortina del revelado si hay diferencia Y se guardó el «antes». */
   const hayComparacionRevelado = revelado === 'REVELADA' && Boolean(image.urlRawLarge);
-  const pendiente = (historial ?? []).find((r) => r.status === 'PENDIENTE') ?? null;
+  const pendiente =
+    (historial ?? []).find(
+      (r) => r.status === 'PENDIENTE' || r.status === 'PROCESANDO',
+    ) ?? null;
   const aplicado = (historial ?? []).find((r) => r.id === image.retouchId) ?? null;
 
   return (
@@ -217,7 +223,8 @@ export function FichaFoto({
           <section className="flex flex-wrap items-start justify-between gap-2 rounded-md border p-3">
             <div className="min-w-0">
               <h4 className="flex items-center gap-1.5 text-sm font-medium">
-                <SunMedium className="size-4 text-muted-foreground" aria-hidden /> Revelado
+                <SunMedium className="size-4 text-muted-foreground" aria-hidden />{' '}
+                Revelado
               </h4>
               <p className="text-xs text-muted-foreground">
                 {/* Tres situaciones y solo una tiene comparación que enseñar.
@@ -254,7 +261,8 @@ export function FichaFoto({
                 disabled={ocupado}
                 onClick={() =>
                   void conCuidado(
-                    () => apiRetoque.revelar(propertyId, image.id, revelado !== 'REVELADA'),
+                    () =>
+                      apiRetoque.revelar(propertyId, image.id, revelado !== 'REVELADA'),
                     'No se pudo cambiar el revelado.',
                   )
                 }
@@ -271,27 +279,52 @@ export function FichaFoto({
               sugerencias={propuesta.sugerencias}
               metricas={propuesta.metricas}
               accionAuto={
-                encuadre && encuadre.cortes.length > 0 && (
-                  /* Y este botón NO aplica: enseña. Ese es el punto entero de
+                image.crop ? (
+                  /* Ya está recortada. Lo que hace falta entonces no es volver
+                     a recortar, es poder deshacerlo: el servidor guarda la caja
+                     y regenera desde el negativo, así que la foto entera sigue
+                     estando. */
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    disabled={ocupado}
+                    onClick={() =>
+                      void conCuidado(
+                        () => apiRetoque.deshacerRecorte(image.id),
+                        'No se pudo deshacer el recorte.',
+                      )
+                    }
+                  >
+                    <Undo2 /> Deshacer el recorte
+                  </Button>
+                ) : (
+                  encuadre &&
+                  encuadre.cortes.length > 0 && (
+                    /* Y este botón NO aplica: enseña. Ese es el punto entero de
                      la pieza — el recorte se ve antes de decidirlo, porque
                      leyendo la frase que lo describe no se distingue el bueno
                      del que se come una ventana. */
-                  <Button variant="outline" size="sm" onClick={() => setViendoRecorte(true)}>
-                    <Crop /> Ver cómo queda
-                  </Button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={() => setViendoRecorte(true)}
+                    >
+                      <Crop /> Ver cómo queda
+                    </Button>
+                  )
                 )
               }
             />
           )}
 
           {/* --- 3. el retoque con IA ------------------------------------- */}
-          {retoqueHabilitado && editable && historial !== null && (
+          {estadoRetoque?.enabled && editable && historial !== null && (
             <BloqueRetoque
               image={image}
               pendiente={pendiente}
               aplicado={aplicado}
               historial={historial}
-              costeAnalisisUsd={costeAnalisisUsd}
+              estado={estadoRetoque}
               ocupado={ocupado}
               onPedir={(instruccion, asumida) =>
                 void conCuidado(async () => {
@@ -331,7 +364,10 @@ export function FichaFoto({
               void conCuidado(async () => {
                 await apiRetoque.recortar(
                   image.id,
-                  encuadre.cortes.map((c) => ({ borde: c.borde, porcion: c.porcion })),
+                  /* `aplicable` es lo que se dibujó en la previsualización.
+                     Mandar `porcion` aquí sería enseñar un recorte y aplicar
+                     otro, que es el fallo que este diálogo existe para evitar. */
+                  encuadre.cortes.map((c) => ({ borde: c.borde, porcion: c.aplicable })),
                 );
                 setViendoRecorte(false);
               }, 'No se pudo aplicar el recorte.')
@@ -380,9 +416,8 @@ function ConfirmarRecorte({
         />
         <p className="text-xs text-muted-foreground">
           Mira lo oscurecido antes de aceptar: es lo que desaparece. Probando estas
-          propuestas sobre fotos reales, varias que sonaban razonables se comían algo
-          que importaba —una ventana, medio espejo—, y eso no se ve leyendo, solo
-          mirando.
+          propuestas sobre fotos reales, varias que sonaban razonables se comían algo que
+          importaba —una ventana, medio espejo—, y eso no se ve leyendo, solo mirando.
         </p>
         <div className="flex flex-wrap justify-end gap-2">
           <Button variant="outline" onClick={onClose}>
@@ -411,7 +446,7 @@ function BloqueRetoque({
   pendiente,
   aplicado,
   historial,
-  costeAnalisisUsd,
+  estado,
   ocupado,
   onPedir,
   onDecidir,
@@ -421,7 +456,7 @@ function BloqueRetoque({
   pendiente: Retoque | null;
   aplicado: Retoque | null;
   historial: Retoque[];
-  costeAnalisisUsd: number | null;
+  estado: EstadoRetoque;
   ocupado: boolean;
   onPedir: (instruccion: string, asumida: boolean) => void;
   onDecidir: (id: string, acepta: boolean) => void;
@@ -477,7 +512,10 @@ function BloqueRetoque({
 
   if (pendiente && pendiente.retouchedSnapshot) {
     return (
-      <section ref={bloquePendiente} className="flex flex-col gap-2 rounded-md border p-3">
+      <section
+        ref={bloquePendiente}
+        className="flex flex-col gap-2 rounded-md border p-3"
+      >
         <p className="text-sm font-medium">
           Esto es lo que ha salido. Todavía no se publica.
         </p>
@@ -490,7 +528,11 @@ function BloqueRetoque({
           etiquetaDespues="Retoque IA"
         />
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={ocupado} onClick={() => onDecidir(pendiente.id, true)}>
+          <Button
+            size="sm"
+            disabled={ocupado}
+            onClick={() => onDecidir(pendiente.id, true)}
+          >
             <Check /> Publicar el retoque
           </Button>
           <Button
@@ -516,9 +558,11 @@ function BloqueRetoque({
         <p className="flex items-start gap-1.5 text-xs text-amber-800">
           <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
           <span>
-            Compara la foto entera, no solo lo que pediste: el modelo la redibuja
-            completa y cambia cosas que nadie le pidió. En pruebas se comió la cenefa
-            de un ventanal y borró la marca de agua de una fachada.
+            Compara la foto entera, no solo lo que pediste: el modelo la redibuja completa
+            y cambia cosas que nadie le pidió. Mira los remates, las molduras y los
+            marcos, que es donde inventa — en pruebas se comió la cenefa de un ventanal,
+            borró la marca de agua de una fachada y convirtió una cornisa discreta en una
+            moldura decorativa que en la casa no está.
           </span>
         </p>
         <p className="text-xs text-muted-foreground">
@@ -540,15 +584,15 @@ function BloqueRetoque({
     día que cambie la pantalla ya lo aguanta.
   */
   if (pendiente && !pendiente.retouchedSnapshot) {
-    return pendiente.error ? (
+    return pendiente.status === 'FALLIDO' || pendiente.error ? (
       <Alert tone="error">
         El último intento falló: {pendiente.error} Se pagó igual (
         {dolares(pendiente.costUsd)}).
       </Alert>
     ) : (
       <Alert tone="warn">
-        La IA está generando la foto. Ya está pagada: no hace falta volver a pulsar.
-        Tarda un minuto y medio largo.
+        La IA está generando la foto. Ya está pagada: no hace falta volver a pulsar. Tarda
+        cerca de minuto y medio.
       </Alert>
     );
   }
@@ -560,8 +604,8 @@ function BloqueRetoque({
           <Wand2 className="size-4 text-muted-foreground" aria-hidden /> Retocar con IA
         </h4>
         <p className="text-xs text-muted-foreground">
-          Genera una foto nueva a partir de esta. Es lo caro de la pantalla y lo único
-          que puede cambiar lo que hay en la casa: se pide foto a foto, nunca en lote.
+          Genera una foto nueva a partir de esta. Es lo caro de la pantalla y lo único que
+          puede cambiar lo que hay en la casa: se pide foto a foto, nunca en lote.
         </p>
       </div>
 
@@ -633,8 +677,8 @@ function BloqueRetoque({
                 className="mt-0.5 size-3.5"
               />
               <span>
-                Conozco este inmueble y asumo que la foto va a dejar de mostrarlo como
-                es. Queda guardado que lo dije yo.
+                Conozco este inmueble y asumo que la foto va a dejar de mostrarlo como es.
+                Queda guardado que lo dije yo.
               </span>
             </label>
           )}
@@ -645,7 +689,10 @@ function BloqueRetoque({
         {/* El coste, en el mismo bloque que el botón y antes de él. */}
         <p className="text-xs text-muted-foreground">
           {previo
-            ? costeEnPalabras(previo.costeOrientativoUsd, costeAnalisisUsd)
+            ? costeEnPalabras({
+                ...estado,
+                retoqueUsd: previo.costeOrientativoUsd ?? estado.retoqueUsd,
+              })
             : 'Escribe qué quieres y te digo qué haría y cuánto cuesta, antes de gastar nada.'}
           {gastado > 0 && ` · ya se ha gastado ${dolares(gastado)} en esta foto`}
         </p>
@@ -684,8 +731,8 @@ function BloqueRetoque({
 
       {!image.aiEdited && historial.some((r) => r.status === 'REVERTIDO') && (
         <p className="text-xs text-muted-foreground">
-          Esta foto estuvo retocada y se volvió a la de verdad. Lo que se publica ahora
-          es una fotografía.
+          Esta foto estuvo retocada y se volvió a la de verdad. Lo que se publica ahora es
+          una fotografía.
         </p>
       )}
     </section>

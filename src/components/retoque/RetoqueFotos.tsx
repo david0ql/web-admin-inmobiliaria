@@ -121,7 +121,6 @@ export function RetoqueFotos({
   if (estado.loading) return null;
   if (images.length === 0) return null;
 
-  const retoqueHabilitado = estado.data?.retouch?.enabled === true;
   const reveladas = images.filter((i) => estadoRevelado(i) !== 'SIN_REVELAR').length;
   const retocadas = images.filter((i) => i.aiEdited ?? Boolean(i.retouchId)).length;
   const conRecorte = images.filter(
@@ -228,11 +227,7 @@ export function RetoqueFotos({
           total={images.length}
           encuadre={porImagen.get(foto.id) ?? null}
           propuesta={porPropuesta.get(foto.id) ?? null}
-          retoqueHabilitado={retoqueHabilitado}
-          /* Si la API no lo publica, la comparación «cuesta N veces
-             analizarla» no se enseña y queda el importe solo. Inventarla sería
-             peor que no darla. */
-          costeAnalisisUsd={estado.data?.retouch?.costeAnalisisUsd ?? null}
+          estadoRetoque={estado.data?.retouch ?? null}
           editable={puede}
           onClose={() => setAbierta(null)}
           onCambio={recargar}
