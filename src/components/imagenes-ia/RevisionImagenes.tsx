@@ -52,6 +52,10 @@ export function RevisionImagenes({
   /* Lo que se acaba de revisar, por id de análisis. Se pisa lo cargado en vez
      de recargarlo todo: la respuesta del PATCH ya trae la fila entera. */
   const [revisados, setRevisados] = useState<Record<string, AnalisisImagen>>({});
+  /* Las que se mandaron y el modelo no juzgó. Se guardan de la respuesta
+     porque no se pueden deducir después: una foto sin veredicto puede serlo
+     por esto o por no haberse mandado nunca. */
+  const [sinMirar, setSinMirar] = useState<{ id: string; url: string }[]>([]);
 
   const estado = useFetch<EstadoImagenesIA>((signal) => imagenesIA.estado(signal), []);
   const revision = useFetch<RevisionInmueble>(
@@ -183,7 +187,28 @@ export function RevisionImagenes({
     try {
       const res = await imagenesIA.analizar(propertyId, { force: modo === 'todas' });
       setAhorradas(res.skipped);
+      setSinMirar(res.unanalyzed ?? []);
       setIgnorado(false);
+      revision.reload();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudo analizar. Inténtalo de nuevo.',
+      );
+    } finally {
+      setAnalizando(false);
+    }
+  }
+
+  /** Volver a mandar solo las que se quedaron sin juzgar. */
+  async function reintentar() {
+    setAnalizando(true);
+    setError(null);
+    try {
+      const res = await imagenesIA.analizar(propertyId, {
+        imageIds: sinMirar.map((u) => u.id),
+      });
+      setAhorradas(res.skipped);
+      setSinMirar(res.unanalyzed ?? []);
       revision.reload();
     } catch (err) {
       setError(
@@ -290,7 +315,7 @@ export function RevisionImagenes({
 
         {analizadas > 0 && (
           <p className="note">
-            {analizadas} de {total} {total === 1 ? 'foto analizada' : 'fotos analizadas'}
+            {analizadas} de {total} {total === 1 ? 'foto con veredicto' : 'fotos con veredicto'}
             {album ? ` · prompt v${album.promptVersion} · ${album.model}` : ''}
             {album ? ` · ${dateTime(album.createdAt)}` : ''}
           </p>
@@ -322,11 +347,52 @@ export function RevisionImagenes({
           </p>
         )}
 
+        {/*
+          Lo que se pagó y nadie miró.
+
+          El modelo trunca la lista de respuesta y el JSON sigue siendo válido,
+          así que estas fotos se mandaron, se cobraron y no tienen veredicto. Va
+          en rojo y con las miniaturas delante porque el peligro no es que salga
+          mal: es que se lea como "revisada y sin problemas" una foto que nadie
+          ha mirado — y en el caso donde se cazó, la que faltaba llevaba gente
+          reconocible en la calle.
+        */}
+        {sinMirar.length > 0 && (
+          <div className="flex flex-col gap-2 rounded-md border border-red-200 bg-red-50 p-3">
+            <p className="text-sm text-red-900">
+              {sinMirar.length === 1
+                ? 'El modelo no llegó a mirar esta foto, aunque se mandó.'
+                : `El modelo no llegó a mirar estas ${sinMirar.length} fotos, aunque se mandaron.`}{' '}
+              No es que estén bien: es que no las ha mirado nadie.
+            </p>
+            <div className="grid gap-2 grid-cols-[repeat(auto-fill,minmax(80px,1fr))]">
+              {sinMirar.map((foto) => (
+                <img
+                  key={foto.id}
+                  src={foto.url}
+                  alt=""
+                  loading="lazy"
+                  className="aspect-[4/3] w-full rounded-md border border-red-200 object-cover"
+                />
+              ))}
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              loading={analizando}
+              className="self-start"
+              onClick={() => void reintentar()}
+            >
+              Reintentar {sinMirar.length === 1 ? 'esa foto' : `esas ${sinMirar.length}`}
+            </Button>
+          </div>
+        )}
+
         {nuevas.length > 0 && analizadas > 0 && (
           <Alert tone="warn">
             {nuevas.length === 1
-              ? 'Hay una foto sin analizar, así que no entra en lo que ves aquí.'
-              : `Hay ${nuevas.length} fotos sin analizar, así que no entran en lo que ves aquí.`}
+              ? 'Hay una foto sin veredicto: no es que esté bien, es que nadie la ha mirado.'
+              : `Hay ${nuevas.length} fotos sin veredicto: no es que estén bien, es que nadie las ha mirado.`}
           </Alert>
         )}
 

@@ -129,6 +129,15 @@ export interface ResultadoAnalisis {
   analyzed: AnalisisImagen[];
   /** Fotos que ya estaban analizadas con este prompt y no se volvieron a pagar. */
   skipped: number;
+  /**
+   * Fotos que se mandaron y el modelo no llegó a juzgar, ni repitiéndoselas.
+   *
+   * Existe porque el modelo no siempre devuelve una entrada por imagen: trunca
+   * la lista y el JSON sigue siendo válido. Antes esas fotos se perdían sin
+   * que nadie se enterara, y una galería con fotos que nadie miró se leía
+   * igual que una revisada entera. Vacío en el caso normal.
+   */
+  unanalyzed: { id: string; url: string }[];
   album: AnalisisAlbum | null;
   usage: { inputTokens: number; outputTokens: number } | null;
 }
