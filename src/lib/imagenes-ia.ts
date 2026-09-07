@@ -58,6 +58,17 @@ export interface AnalisisImagen {
   privacy: PrivacyFlags;
   usable: boolean;
   promptVersion: number;
+  /**
+   * Huella del texto que produjo ESTE resultado.
+   *
+   * Existe porque `promptVersion` no bastaba: el número se toma de la versión
+   * activa al lanzar, no del texto que se mandó, así que «versión nueva y
+   * resultados idénticos» se veía igual si el prompt se ignoró que si se
+   * aplicó y no movió nada. Comparándola con la de `status` los dos casos se
+   * separan. `null` en análisis anteriores a la columna: es «no se apuntó»,
+   * no un error.
+   */
+  promptHash: string | null;
   model: string;
   batchId: string | null;
   createdAt: string;
@@ -74,6 +85,8 @@ export interface AnalisisAlbum {
   missing: RoomKind[];
   summary: string | null;
   promptVersion: number;
+  /** La huella del texto que produjo este álbum. Ver `AnalisisImagen`. */
+  promptHash: string | null;
   model: string;
   createdAt: string;
 }
@@ -120,6 +133,8 @@ export interface EstadoImagenesIA {
    */
   maxImages: number;
   promptVersion: number;
+  /** Huella del texto del prompt activo AHORA. Con qué comparar un resultado. */
+  promptHash: string;
   rooms: { value: RoomKind; label: string }[];
   gateCodes: string[];
   severities: string[];
@@ -131,6 +146,8 @@ export interface VersionPrompt {
   id: string;
   version: number;
   body: string;
+  /** Huella de este texto: es con lo que se cotejan los resultados guardados. */
+  hash: string;
   notes: string | null;
   active: boolean;
   createdAt: string;
@@ -138,6 +155,8 @@ export interface VersionPrompt {
 
 export interface PromptActivo {
   active: VersionPrompt;
+  /** Huella de la versión activa. */
+  hash: string;
   /** El texto que viaja con el código: el punto de partida y la marcha atrás. */
   repositoryDefault: string;
 }

@@ -79,6 +79,24 @@ export function RevisionImagenes({
 
   const album = revision.data?.album ?? null;
 
+  /**
+   * Si lo que se ve salió del prompt que hay puesto ahora.
+   *
+   * Se compara el TEXTO —por su huella— y no el número de versión, porque el
+   * número se apunta al lanzar y no depende de lo que se mandó: con él, «he
+   * guardado una versión nueva y sale lo mismo» se leía igual tanto si el
+   * prompt se ignoró como si se aplicó y no cambió nada. Con la huella son dos
+   * respuestas distintas.
+   *
+   * `null` es «no se apuntó cuál» —análisis de antes de que esto existiera—, y
+   * eso no es un fallo: se dice en gris, no en rojo.
+   */
+  const huellaAhora = estado.data?.promptHash ?? null;
+  const huellaUsada = album?.promptHash ?? null;
+  const otroTexto =
+    huellaAhora !== null && huellaUsada !== null && huellaUsada !== huellaAhora;
+  const sinRegistro = album !== null && huellaUsada === null;
+
   /** Las fotos en el orden que propone la IA, y si ese orden cambia algo. */
   const propuesta = useMemo(() => {
     const actual = [...images].sort((a, b) => a.position - b.position).map((i) => i.id);
@@ -228,14 +246,30 @@ export function RevisionImagenes({
           </p>
         )}
 
-        {/* "Caducado" no es que esté mal: es que se hizo con otro prompt u otro
+        {/* "Caducado" no es que esté mal: es que se hizo con otro texto u otro
             modelo, y repetirlo daría otra cosa. Quien decide si compensa
             pagarlo es quien lo lee. */}
-        {revision.data.stale && (
+        {(otroTexto || revision.data.stale) && (
           <Alert tone="warn">
-            Parte de esto se analizó con otra versión del prompt o con otro modelo. Ahora
-            se usaría el prompt v{revision.data.promptVersion} con {revision.data.model}.
+            {otroTexto
+              ? `Esto se analizó con un texto de prompt distinto del que hay puesto ahora (v${revision.data.promptVersion} con ${revision.data.model}). Si acabas de cambiar el prompt, repetirlo dará otra cosa.`
+              : `Parte de esto se analizó con otra versión del prompt o con otro modelo. Ahora se usaría el prompt v${revision.data.promptVersion} con ${revision.data.model}.`}
           </Alert>
+        )}
+
+        {/* Lo contrario, y por eso merece decirse: sale del texto de ahora, sin
+            ambigüedad. Es la respuesta a "¿he cambiado el prompt para nada?". */}
+        {!otroTexto && !sinRegistro && !revision.data.stale && album && (
+          <p className="text-xs text-emerald-700">
+            Salió del prompt que está puesto ahora mismo.
+          </p>
+        )}
+
+        {sinRegistro && (
+          <p className="text-xs text-muted-foreground">
+            De este análisis no se apuntó con qué texto de prompt se hizo: es anterior a
+            que eso se guardara. No quiere decir que esté mal.
+          </p>
         )}
 
         {nuevas.length > 0 && analizadas > 0 && (

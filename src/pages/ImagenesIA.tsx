@@ -678,7 +678,19 @@ function Historial({
                     v{v.version}
                     {v.active && <Badge tone="green">En uso</Badge>}
                   </p>
-                  <p className="note">{dateTime(v.createdAt)}</p>
+                  <p className="note">
+                    {dateTime(v.createdAt)}
+                    {/* La huella del texto. Es lo que deja cotejar una tanda de
+                        resultados con la version que dice haberla producido:
+                        el numero de version se apunta al lanzar y no depende
+                        de lo que se mando. */}
+                    {v.hash && (
+                      /* `.note` va en mayúsculas, y una huella es un código que
+                         se compara a ojo con lo que devuelve la API: en
+                         mayúsculas deja de coincidir carácter a carácter. */
+                      <span className="font-mono normal-case"> · {v.hash}</span>
+                    )}
+                  </p>
                   {v.notes && <p className="mt-0.5 text-sm">{v.notes}</p>}
                 </div>
                 <div className="flex shrink-0 items-center gap-2">
