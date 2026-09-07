@@ -1,41 +1,40 @@
 import { useMemo, useState } from 'react';
-import { Camera, ImageOff, SlidersHorizontal, Wand2 } from 'lucide-react';
+import { Camera, Crop, SlidersHorizontal, Wand2 } from 'lucide-react';
 
-import { Alert, Badge, Button, Card } from '@/components/ui';
-import { ApiError, type MediaImage } from '@/lib/api';
+import { Alert, Badge, Card } from '@/components/ui';
+import { type MediaImage } from '@/lib/api';
 import { useAuth } from '@/lib/auth';
 import { useFetch } from '@/lib/useFetch';
+import { imagenesIA, type RevisionInmueble } from '@/lib/imagenes-ia';
 import {
+  dolares,
+  encuadreDe,
   retoque as apiRetoque,
-  type EstadoModuloRetoque,
-  type EstadoModuloRevelado,
-  type PropuestaImagen,
-  type RevisionPropuesta,
-  type RevisionRevelado,
-  type ReveladoImagen,
+  superficiePerdida,
+  type Encuadre,
+  type EstadoRetoque,
+  type ResumenRetoque,
 } from '@/lib/retoque';
-import { partir } from './Propuesta';
 import { FichaFoto } from './FichaFoto';
 import { cn } from '@/lib/utils';
 
 /**
- * El revelado y el retoque de las fotos de un inmueble.
+ * El revelado, el encuadre y el retoque de las fotos de un inmueble.
  *
  * Va debajo de la revisión con IA y con el mismo criterio que ella: la galería
- * de arriba es el inventario —lo que hay— y esto es lo que se le puede hacer.
- * Separarlo de la galería evita además que subir una foto y retocarla se
- * mezclen en la misma barra de botones, que son dos momentos distintos del
- * trabajo.
+ * de arriba es el inventario —lo que hay—, la revisión dice si la foto está
+ * bien, y esto es lo que se le puede hacer. Separarlo de la galería evita
+ * además que subir una foto y retocarla compartan barra de botones, que son dos
+ * momentos distintos del trabajo.
  *
  * La rejilla pinta miniaturas y solo miniaturas. Al abrir una foto es cuando se
  * piden los tamaños grandes, que es cuando se mira de verdad: con 6.306 fotos
  * reales, algunas de varios megas, lo contrario deja la ficha inservible en el
  * móvil de un asesor.
  *
- * Los tres módulos que alimentan esto se están escribiendo en paralelo. Si el
- * servidor no tiene ninguno, la tarjeta entera no se pinta y nadie se entera;
- * si tiene unos y no otros, se pinta lo que haya. Un 404 aquí no es un error,
- * es una versión.
+ * El encuadre no se pide aparte: viaja dentro del análisis que ya existe. Si
+ * nadie ha analizado el inmueble no hay propuesta que enseñar, y eso es
+ * correcto — la propuesta es una lectura del análisis, no otra cosa que pagar.
  */
 export function RetoqueFotos({
   propertyId,
@@ -51,76 +50,58 @@ export function RetoqueFotos({
 }) {
   const { can } = useAuth();
   const [abierta, setAbierta] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [ocupado, setOcupado] = useState(false);
 
-  const estadoRevelado = useFetch<EstadoModuloRevelado | null>(
-    (signal) => apiRetoque.estadoRevelado(signal),
+  const estado = useFetch<{ retouch?: EstadoRetoque } | null>(
+    (signal) => apiRetoque.estado(signal),
     [],
   );
-  const estadoRetoque = useFetch<EstadoModuloRetoque | null>(
-    (signal) => apiRetoque.estadoRetoque(signal),
-    [],
-  );
-  const revelado = useFetch<RevisionRevelado | null>(
-    (signal) => apiRetoque.revelado(propertyId, signal),
+  const revision = useFetch<RevisionInmueble | null>(
+    (signal) =>
+      imagenesIA.revision(propertyId, signal).catch(() => null),
     [propertyId],
   );
-  const propuesta = useFetch<RevisionPropuesta | null>(
-    (signal) => apiRetoque.propuesta(propertyId, signal),
+  const resumen = useFetch<ResumenRetoque | null>(
+    (signal) => apiRetoque.resumen(propertyId, signal),
     [propertyId],
   );
 
-  const porRevelado = useMemo(
-    () => new Map((revelado.data?.images ?? []).map((r) => [r.propertyImageId, r])),
-    [revelado.data],
-  );
-  const porPropuesta = useMemo(
-    () => new Map((propuesta.data?.images ?? []).map((p) => [p.propertyImageId, p])),
-    [propuesta.data],
-  );
+  /**
+   * El encuadre vigente de cada foto.
+   *
+   * La API devuelve una fila por (foto, versión de prompt, modelo) y las trae
+   * de la más nueva a la más vieja, así que la primera de cada foto es la que
+   * cuenta. Mismo criterio que usa `RevisionImagenes`: si se cambiara aquí, la
+   * ficha enseñaría dos verdades distintas sobre la misma foto.
+   */
+  const porImagen = useMemo(() => {
+    const mapa = new Map<string, Encuadre>();
+    for (const fila of revision.data?.images ?? []) {
+      if (mapa.has(fila.propertyImageId)) continue;
+      const encuadre = encuadreDe(fila);
+      if (encuadre) mapa.set(fila.propertyImageId, encuadre);
+    }
+    return mapa;
+  }, [revision.data]);
 
   const puede = editable && can('ADMIN', 'DIRECTOR', 'COORDINATOR', 'MANAGER', 'AGENT');
 
   function recargar() {
-    revelado.reload();
-    propuesta.reload();
+    revision.reload();
+    resumen.reload();
     onChange();
   }
 
-  async function pedirPropuesta() {
-    setOcupado(true);
-    setError(null);
-    try {
-      await apiRetoque.proponer(propertyId, {});
-      propuesta.reload();
-    } catch (err) {
-      setError(
-        err instanceof ApiError && err.status === 404
-          ? 'Este servidor todavía no sabe proponer retoques.'
-          : err instanceof ApiError
-            ? err.message
-            : 'No se pudo pedir la propuesta.',
-      );
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  /* Mientras se carga no hay nada que decir, y si NINGUNO de los tres módulos
-     existe la tarjeta no tiene por qué ocupar sitio en la ficha. */
-  if (estadoRevelado.loading || estadoRetoque.loading) return null;
-  const hayAlgo =
-    estadoRevelado.data !== null || estadoRetoque.data !== null || propuesta.data !== null;
-  if (!hayAlgo) return null;
+  /* Mientras se carga no hay nada que decir. Sin fotos tampoco. */
+  if (estado.loading) return null;
   if (images.length === 0) return null;
 
-  const reveladas = images.filter((i) => porRevelado.get(i.id)?.estado === 'HECHO').length;
-  const retocadas = images.filter((i) => i.aiEdited).length;
-  const conVisita = images.filter(
-    (i) => (porPropuesta.get(i.id)?.sugerencias ?? []).some((s) => s.destino === 'REVISITA'),
+  const retoqueHabilitado = estado.data?.retouch?.enabled === true;
+  const reveladas = images.filter((i) => i.developedAt != null).length;
+  const retocadas = images.filter((i) => i.retouchId).length;
+  const conRecorte = images.filter(
+    (i) => (porImagen.get(i.id)?.cortes.length ?? 0) > 0,
   ).length;
-  const sinPropuesta = propuesta.data === null ? 0 : images.filter((i) => !porPropuesta.has(i.id)).length;
+  const aRepetir = images.filter((i) => porImagen.get(i.id)?.via === 'REPETIR').length;
 
   const foto = abierta ? images.find((i) => i.id === abierta) : null;
 
@@ -131,55 +112,43 @@ export function RetoqueFotos({
           <SlidersHorizontal className="size-3.5" aria-hidden /> Revelado y retoque
         </h3>
       }
-      action={
-        puede &&
-        propuesta.data !== null &&
-        sinPropuesta > 0 && (
-          <Button variant="outline" size="sm" loading={ocupado} onClick={() => void pedirPropuesta()}>
-            Proponer retoques ({sinPropuesta})
-          </Button>
-        )
-      }
     >
       <div className="flex flex-col gap-4">
-        {error && <Alert tone="error">{error}</Alert>}
-
         {/* Lo que hay, en una línea. El asesor abre una foto porque algo de
             este resumen le llamó la atención, no al revés. */}
         <p className="text-sm text-muted-foreground">
-          {estadoRevelado.data && (
+          {reveladas === images.length
+            ? 'Todas las fotos están reveladas. '
+            : `${reveladas} de ${images.length} ${reveladas === 1 ? 'foto revelada' : 'fotos reveladas'}. `}
+          El revelado —luz, contraste y color— se aplica solo al subir y se puede
+          deshacer foto a foto; el encuadre no se toca nunca sin que alguien lo mire.
+          {aRepetir > 0 && (
             <>
-              {reveladas === 0
-                ? 'Ninguna foto se ha revelado todavía. '
-                : `${reveladas} de ${images.length} ${reveladas === 1 ? 'foto revelada' : 'fotos reveladas'}. `}
-              {estadoRevelado.data.auto
-                ? 'El revelado se aplica solo al subir, y se puede deshacer foto a foto. '
-                : 'El revelado no se aplica solo en este servidor. '}
-            </>
-          )}
-          {conVisita > 0 && (
-            <>
+              {' '}
               <strong className="font-medium text-foreground">
-                {conVisita === 1
+                {aRepetir === 1
                   ? 'Una foto pide volver a la casa'
-                  : `${conVisita} fotos piden volver a la casa`}
+                  : `${aRepetir} fotos piden volver a la casa`}
               </strong>
-              : eso no lo arregla ningún programa.{' '}
+              : eso no lo arregla ningún programa.
             </>
           )}
-          Pulsa una foto para ver el antes y el después y lo que se le propone.
+          {porImagen.size === 0 && revision.data !== null && (
+            <> Todavía no hay propuesta de encuadre: sale del análisis con IA de arriba.</>
+          )}
         </p>
 
         {retocadas > 0 && (
           /* Se dice arriba y no solo en cada tarjeta: mirando foto a foto no se
-             ve cuántas de las que están publicadas son generadas, y ese número
-             es el que importa cuando un comprador llega a la casa. */
+             ve cuántas de las publicadas son generadas, y ese número es el que
+             importa cuando un comprador llega a la casa. */
           <Alert tone="warn">
             {retocadas === 1
-              ? 'Una de las fotos publicadas de este inmueble está retocada con IA.'
-              : `${retocadas} de las fotos publicadas de este inmueble están retocadas con IA.`}{' '}
-            Quien vea la ficha está viendo píxeles generados: comprueba que la casa se
-            parece a lo que se enseña.
+              ? 'Una de las fotos publicadas de este inmueble no es una fotografía: es un retoque de IA.'
+              : `${retocadas} de las fotos publicadas de este inmueble no son fotografías: son retoques de IA.`}{' '}
+            {resumen.data && resumen.data.alteranLaRealidad > 0
+              ? `${resumen.data.alteranLaRealidad === 1 ? 'Uno de ellos altera' : `${resumen.data.alteranLaRealidad} de ellos alteran`} lo que hay en la casa, no solo cómo se ve.`
+              : 'Comprueba que la casa se parece a lo que se enseña.'}
           </Alert>
         )}
 
@@ -189,12 +158,34 @@ export function RetoqueFotos({
               key={image.id}
               image={image}
               indice={indice}
-              revelado={porRevelado.get(image.id) ?? null}
-              propuesta={porPropuesta.get(image.id) ?? null}
+              encuadre={porImagen.get(image.id) ?? null}
               onAbrir={() => setAbierta(image.id)}
             />
           ))}
         </ul>
+
+        {/* Lo gastado, al final y sin adornos. Se suma todo lo intentado y no
+            solo lo publicado: un descarte también se pagó, y una cuenta que
+            solo mira los aciertos miente sobre lo que cuesta la función. */}
+        {resumen.data && resumen.data.intentos > 0 && (
+          <p className="tabular text-xs text-muted-foreground">
+            {resumen.data.intentos === 1
+              ? '1 retoque pedido'
+              : `${resumen.data.intentos} retoques pedidos`}
+            , {resumen.data.aplicados} publicados · {dolares(resumen.data.costeTotalUsd)} en
+            total, descartes incluidos.
+          </p>
+        )}
+
+        {conRecorte > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {conRecorte === 1
+              ? 'Hay 1 foto con propuesta de recorte.'
+              : `Hay ${conRecorte} fotos con propuesta de recorte.`}{' '}
+            Ábrelas para ver cómo quedarían: el recorte no se aplica sin que se vea
+            primero.
+          </p>
+        )}
       </div>
 
       {foto && (
@@ -203,9 +194,12 @@ export function RetoqueFotos({
           image={foto}
           posicion={images.findIndex((i) => i.id === foto.id) + 1}
           total={images.length}
-          revelado={porRevelado.get(foto.id) ?? null}
-          propuesta={porPropuesta.get(foto.id) ?? null}
-          estadoRetoque={estadoRetoque.data?.enabled ? estadoRetoque.data : null}
+          encuadre={porImagen.get(foto.id) ?? null}
+          retoqueHabilitado={retoqueHabilitado}
+          /* El coste de un análisis no lo publica la API todavía, así que la
+             comparación «cuesta N veces analizarla» no se enseña. Inventarla
+             sería peor que no darla. */
+          costeAnalisisUsd={null}
           editable={puede}
           onClose={() => setAbierta(null)}
           onCambio={recargar}
@@ -218,35 +212,31 @@ export function RetoqueFotos({
 /**
  * Una foto en la rejilla, con lo que hay que saber de ella sin abrirla.
  *
- * Solo tres distintivos, y ninguno es decorativo: si está retocada con IA
- * (porque eso cambia lo que ve un comprador), si pide una visita (porque eso
- * cuesta un desplazamiento) y cuántos arreglos automáticos le quedan (porque
- * eso es un botón). Todo lo demás cabe dentro.
+ * Tres distintivos y ninguno decorativo: si lo que se publica no es una
+ * fotografía (porque eso cambia lo que ve un comprador), si pide volver a la
+ * casa (porque cuesta un desplazamiento) y si hay un recorte propuesto (porque
+ * es algo que mirar). Lo demás cabe dentro.
  */
 function TileRetoque({
   image,
   indice,
-  revelado,
-  propuesta,
+  encuadre,
   onAbrir,
 }: {
   image: MediaImage;
   indice: number;
-  revelado: ReveladoImagen | null;
-  propuesta: PropuestaImagen | null;
+  encuadre: Encuadre | null;
   onAbrir: () => void;
 }) {
-  const partida = propuesta ? partir(propuesta.sugerencias) : null;
-  const revisita = (partida?.revisita.length ?? 0) > 0;
-  const autos = partida?.auto.length ?? 0;
-  const revelada = revelado?.estado === 'HECHO';
+  const repetir = encuadre?.via === 'REPETIR';
+  const cortes = encuadre?.cortes ?? [];
 
   return (
     <li
       className={cn(
         'relative aspect-[4/3] overflow-hidden rounded-md border bg-secondary',
-        revisita && 'border-amber-300',
-        image.aiEdited && 'border-amber-400',
+        repetir && 'border-amber-300',
+        image.retouchId && 'border-amber-400',
       )}
     >
       <button
@@ -255,10 +245,10 @@ function TileRetoque({
         aria-label={`Ver el revelado y la propuesta de la foto ${indice + 1}`}
         className="block size-full cursor-zoom-in"
       >
-        {/* Siempre la miniatura de 560 px, también la revelada: en un tile de
-            128 px el original no aporta un píxel visible y sí varios megas. */}
+        {/* Siempre la miniatura de 560 px: en un tile de 128 px el tamaño de
+            ficha no aporta un píxel visible y sí varios megas. */}
         <img
-          src={revelada ? revelado.thumbDespues : image.url}
+          src={image.url}
           alt={image.description ?? `Foto ${indice + 1}`}
           loading="lazy"
           decoding="async"
@@ -267,41 +257,32 @@ function TileRetoque({
       </button>
 
       {/* Todo lo que va encima de la foto es `pointer-events-none`: son
-          rotulos, y la foto entera tiene que seguir siendo el boton que abre la
+          rótulos, y la foto entera tiene que seguir siendo el botón que abre la
           ficha. Sin esto, pulsar sobre la banda de abajo —que es justo donde
-          cae el pulgar en un movil— no hacia nada. */}
+          cae el pulgar en un móvil— no hacía nada. */}
       <span className="tabular pointer-events-none absolute top-1.5 left-1.5 rounded bg-black/65 px-1.5 py-0.5 text-[0.625rem] font-bold text-white">
         {indice + 1}
       </span>
 
       <span className="pointer-events-none absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
-        {image.aiEdited && (
+        {image.retouchId && (
           <Badge tone="amber">
             <Wand2 className="size-3" aria-hidden /> IA
           </Badge>
         )}
-        {revisita && (
+        {repetir && (
           <Badge tone="amber">
             <Camera className="size-3" aria-hidden /> Visita
           </Badge>
         )}
       </span>
 
-      {(autos > 0 || revelado?.estado === 'FALLIDO') && (
+      {cortes.length > 0 && (
         <span className="pointer-events-none absolute inset-x-0 bottom-0 flex items-center gap-1 bg-gradient-to-t from-black/70 to-transparent px-1.5 pt-4 pb-1 text-[0.625rem] font-medium text-white">
-          {revelado?.estado === 'FALLIDO' ? (
-            <>
-              <ImageOff className="size-3" aria-hidden /> No se pudo revelar
-            </>
-          ) : (
-            <>
-              <SlidersHorizontal className="size-3" aria-hidden />
-              {/* «1 arreglo» y no «1 arreglo automático»: en un tile de 128 px
-                  la frase larga parte en dos líneas y se come la foto. Que son
-                  automáticos ya lo dice el bloque al abrirla. */}
-              {autos === 1 ? '1 arreglo' : `${autos} arreglos`}
-            </>
-          )}
+          <Crop className="size-3" aria-hidden />
+          {/* El porcentaje y no «hay un recorte»: es lo que decide si merece la
+              pena abrirla. Tirar el 4% y tirar el 30% no son la misma noticia. */}
+          Recorte del {superficiePerdida(cortes)}%
         </span>
       )}
     </li>

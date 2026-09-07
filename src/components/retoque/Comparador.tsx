@@ -53,7 +53,15 @@ export function Comparador({
 
   return (
     <div className={cn('flex flex-col gap-2', className)}>
-      <div className="relative overflow-hidden rounded-md bg-secondary select-none">
+      {/*
+        `min-h` y carga ansiosa, las dos por el mismo motivo: este bloque solo
+        se monta al abrir el dialogo, asi que `lazy` no ahorra ninguna descarga
+        —la foto se va a pedir igual— y mientras no habia llegado el contenedor
+        se quedaba a cero de alto. El resultado era un dialogo con los botones
+        de la cortina y ninguna foto encima, que es exactamente lo contrario de
+        lo que esta pieza existe para hacer.
+      */}
+      <div className="relative min-h-40 overflow-hidden rounded-md bg-secondary select-none">
         {/*
           El «después» va debajo y entero. Es el que manda el alto del bloque, y
           es el que se queda si el «antes» tardase en llegar: enseñar de más lo
@@ -62,7 +70,7 @@ export function Comparador({
         <img
           src={despues}
           alt={alt}
-          loading="lazy"
+          loading="eager"
           decoding="async"
           draggable={false}
           className="block max-h-[52dvh] w-full object-contain sm:max-h-[60dvh]"
@@ -82,7 +90,7 @@ export function Comparador({
           <img
             src={antes}
             alt=""
-            loading="lazy"
+            loading="eager"
             decoding="async"
             draggable={false}
             className="block max-h-[52dvh] w-full object-contain sm:max-h-[60dvh]"

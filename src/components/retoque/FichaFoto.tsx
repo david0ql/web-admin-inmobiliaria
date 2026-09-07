@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { Check, Undo2, Wand2, X } from 'lucide-react';
+import { Check, Crop, SunMedium, TriangleAlert, Undo2, Wand2, X } from 'lucide-react';
 
 import {
   Alert,
@@ -8,20 +8,25 @@ import {
   Dialog,
   DialogContent,
   DialogTitle,
+  Textarea,
 } from '@/components/ui';
 import { ApiError, type MediaImage } from '@/lib/api';
 import { dateTime } from '@/lib/format';
+import { useDebounced } from '@/lib/useFetch';
 import {
   costeEnPalabras,
-  importe,
+  dolares,
+  KIND_TONO,
+  reveladoEnPalabras,
   retoque as apiRetoque,
-  type EstadoModuloRetoque,
-  type PropuestaImagen,
+  superficiePerdida,
+  type Encuadre,
+  type PrevioRetoque,
   type Retoque,
-  type ReveladoImagen,
 } from '@/lib/retoque';
 import { Comparador } from './Comparador';
-import { ListasPropuesta, partir } from './Propuesta';
+import { BloqueEncuadre } from './Propuesta';
+import { Recorte } from './Recorte';
 
 /**
  * Una foto, con todo lo que se puede hacer con ella.
@@ -31,20 +36,24 @@ import { ListasPropuesta, partir } from './Propuesta';
  * mandarlo a otra ruta le haría perder el sitio.
  *
  * Lo que ordena el contenido, de arriba abajo, es cuánto compromete cada cosa:
- * primero lo que ya pasó y no costó nada (el revelado, comparable y
- * reversible), después lo que habría que hacer (la propuesta, que solo son
- * palabras) y al final lo único que gasta dinero y cambia lo que ve un
- * comprador (el retoque con IA). Puesto al revés, el botón caro sería lo
- * primero que se ve.
+ * primero lo que ya pasó y no costó nada (el revelado, reversible), después el
+ * recorte (gratis, pero cambia el encuadre) y al final lo único que gasta
+ * dinero y puede cambiar lo que hay en la foto (el retoque con IA). Puesto al
+ * revés, el botón caro sería lo primero que se ve.
+ *
+ * La regla que atraviesa las tres: entre el botón y la foto publicada hay
+ * siempre un par de ojos. En el recorte porque se probó y varios recortes que
+ * sonaban razonables salían peor; en el retoque porque genera píxeles que no
+ * estaban y lo va a ver un comprador.
  */
 export function FichaFoto({
   propertyId,
   image,
   posicion,
   total,
-  revelado,
-  propuesta,
-  estadoRetoque,
+  encuadre,
+  retoqueHabilitado,
+  costeAnalisisUsd,
   editable,
   onClose,
   onCambio,
@@ -53,10 +62,11 @@ export function FichaFoto({
   image: MediaImage;
   posicion: number;
   total: number;
-  revelado: ReveladoImagen | null;
-  propuesta: PropuestaImagen | null;
-  /** `null` si este servidor no tiene el módulo de retoque, o está apagado. */
-  estadoRetoque: EstadoModuloRetoque | null;
+  encuadre: Encuadre | null;
+  /** `/image-ai/status` dice si hay clave del proveedor. Sin ella no se ofrece. */
+  retoqueHabilitado: boolean;
+  /** Para poder decir «cuesta N veces analizarla». Sin él, solo la cifra. */
+  costeAnalisisUsd: number | null;
   editable: boolean;
   onClose: () => void;
   /** La rejilla y la galería de arriba tienen que repintarse. */
@@ -64,51 +74,26 @@ export function FichaFoto({
 }) {
   const [error, setError] = useState<string | null>(null);
   const [ocupado, setOcupado] = useState(false);
-  const [confirmando, setConfirmando] = useState(false);
-  const [trabajo, setTrabajo] = useState<Retoque | null>(null);
-  const [cargandoTrabajo, setCargandoTrabajo] = useState(estadoRetoque !== null);
+  const [viendoRecorte, setViendoRecorte] = useState(false);
+  const [historial, setHistorial] = useState<Retoque[] | null>(null);
 
-  /* Lo que hubiera de antes: un retoque a medias o uno ya aceptado. Si el
-     módulo no está, no se pregunta. */
   useEffect(() => {
-    if (!estadoRetoque) return;
+    if (!retoqueHabilitado) return;
     let vivo = true;
     apiRetoque
-      .retoqueDe(image.id)
-      .then((r) => {
-        if (vivo) setTrabajo(r);
+      .retoquesDe(image.id)
+      .then((filas) => {
+        if (vivo) setHistorial(filas ?? []);
       })
       .catch(() => {
-        /* Que no se sepa si hay un retoque previo no puede tumbar el diálogo:
-           lo demás —el revelado y la propuesta— sigue siendo útil. */
-      })
-      .finally(() => {
-        if (vivo) setCargandoTrabajo(false);
+        /* Que no se sepa el historial no puede tumbar el diálogo: el revelado y
+           el encuadre siguen siendo útiles sin él. */
+        if (vivo) setHistorial([]);
       });
     return () => {
       vivo = false;
     };
-  }, [image.id, estadoRetoque]);
-
-  /*
-    Mientras el modelo genera, se vuelve a preguntar cada tres segundos.
-
-    Sin esto el asesor se queda mirando un «procesando» que no cambia nunca y
-    acaba pulsando otra vez — y la segunda pulsación se paga igual que la
-    primera.
-  */
-  useEffect(() => {
-    if (trabajo?.estado !== 'PROCESANDO') return;
-    const id = setInterval(() => {
-      void apiRetoque
-        .retoqueDe(image.id)
-        .then((r) => {
-          if (r) setTrabajo(r);
-        })
-        .catch(() => {});
-    }, 3000);
-    return () => clearInterval(id);
-  }, [trabajo?.estado, image.id]);
+  }, [image.id, retoqueHabilitado]);
 
   function fallo(err: unknown, porDefecto: string) {
     /* El 404 se dice aparte: no es que quien pulsa haya roto nada, es que el
@@ -121,107 +106,23 @@ export function FichaFoto({
     setError(err instanceof ApiError ? err.message : porDefecto);
   }
 
-  /** Rehacer el revelado con lo que propone la lista automática. */
-  async function aplicarAutomaticas() {
+  async function conCuidado(accion: () => Promise<unknown>, porDefecto: string) {
     setOcupado(true);
     setError(null);
     try {
-      await apiRetoque.revelar(propertyId, {
-        imageIds: [image.id],
-        force: true,
-      });
+      await accion();
       onCambio();
     } catch (err) {
-      fallo(err, 'No se pudo aplicar el revelado.');
+      fallo(err, porDefecto);
     } finally {
       setOcupado(false);
     }
   }
 
-  async function volverAlOriginalRevelado() {
-    setOcupado(true);
-    setError(null);
-    try {
-      await apiRetoque.descartarRevelado(image.id);
-      onCambio();
-    } catch (err) {
-      fallo(err, 'No se pudo volver al original.');
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  async function lanzarRetoque() {
-    setConfirmando(false);
-    setOcupado(true);
-    setError(null);
-    try {
-      /* Solo se le mandan las sugerencias que el diagnóstico marcó como
-         automáticas: pedirle al modelo que arregle «falta luz» es pedirle que
-         se invente una lámpara. */
-      const ids = propuesta
-        ? partir(propuesta.sugerencias).auto.map((s) => s.id)
-        : undefined;
-      setTrabajo(await apiRetoque.retocar(image.id, ids));
-    } catch (err) {
-      fallo(err, 'No se pudo lanzar el retoque.');
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  async function decidir(acepta: boolean) {
-    if (!trabajo) return;
-    setOcupado(true);
-    setError(null);
-    try {
-      const res = acepta
-        ? await apiRetoque.aceptar(trabajo.id)
-        : await apiRetoque.descartar(trabajo.id);
-      setTrabajo(res);
-      onCambio();
-    } catch (err) {
-      fallo(err, 'No se pudo guardar la decisión.');
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  async function deshacerRetoque() {
-    setOcupado(true);
-    setError(null);
-    try {
-      await apiRetoque.volverAlOriginal(image.id);
-      setTrabajo(null);
-      onCambio();
-    } catch (err) {
-      fallo(err, 'No se pudo volver al original.');
-    } finally {
-      setOcupado(false);
-    }
-  }
-
-  /*
-    Cuando el resultado llega, se lleva a la vista.
-
-    El retoque tarda entre segundos y minutos y el bloque vive al final de un
-    diálogo que en el móvil hay que bajar entero: sin esto, la foto por la que
-    se acaba de pagar aparece fuera de pantalla y quien esperaba mirando arriba
-    no ve que ya está.
-  */
-  const bloqueRetoque = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (trabajo?.estado === 'LISTO') {
-      bloqueRetoque.current?.scrollIntoView({
-        behavior: 'smooth',
-        block: 'nearest',
-      });
-    }
-  }, [trabajo?.estado]);
-
-  const revelada = revelado?.estado === 'HECHO';
-  const retocada = trabajo?.estado === 'ACEPTADO' || image.aiEdited === true;
-  const autoPendientes = propuesta ? partir(propuesta.sugerencias).auto.length : 0;
+  const revelada = image.developedAt != null;
+  const ajustes = reveladoEnPalabras(image.develop ?? null);
+  const pendiente = (historial ?? []).find((r) => r.status === 'PENDIENTE') ?? null;
+  const aplicado = (historial ?? []).find((r) => r.id === image.retouchId) ?? null;
 
   return (
     <Dialog open onOpenChange={(abierto) => !abierto && onClose()}>
@@ -233,44 +134,26 @@ export function FichaFoto({
               {image.width} × {image.height} px
             </span>
           ) : null}
-          {retocada && <Badge tone="amber">Retocada con IA</Badge>}
+          {image.retouchId && <Badge tone="amber">Retocada con IA</Badge>}
         </DialogTitle>
 
         <div className="flex max-h-[75dvh] flex-col gap-4 overflow-y-auto">
           {error && <Alert tone="error">{error}</Alert>}
 
-          {/* --- 1. el revelado: lo que ya se hizo, y si mejoró ------------ */}
-          {revelada && revelado ? (
-            <section className="flex flex-col gap-2">
-              <Comparador
-                antes={revelado.urlAntes}
-                despues={revelado.urlDespues}
-                alt={image.description ?? `Foto ${posicion} revelada`}
-              />
-              {revelado.ajustes.length > 0 && (
-                <p className="tabular flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
-                  {revelado.ajustes.map((a) => (
-                    <span key={a.clave}>
-                      {a.etiqueta} {a.valor}
-                    </span>
-                  ))}
-                </p>
-              )}
-              {editable && (
-                /* La marcha atrás, a la vista y no escondida en un menú: lo que
-                   hace aceptable que el revelado se aplique solo es que
-                   deshacerlo sea trivial. */
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  className="self-start"
-                  disabled={ocupado}
-                  onClick={() => void volverAlOriginalRevelado()}
-                >
-                  <Undo2 /> Publicar el original, sin revelar
-                </Button>
-              )}
-            </section>
+          {/*
+            Si lo que se publica es un retoque aplicado, la vista por defecto no
+            es la foto: es la comparación con la de verdad. Quien abre esta
+            ficha dentro de seis meses tiene que poder ver de un vistazo cuánto
+            se separó el anuncio del inmueble.
+          */}
+          {aplicado ? (
+            <Comparador
+              antes={aplicado.originalSnapshot.urlLarge}
+              despues={image.urlLarge ?? image.url}
+              alt={image.description ?? `Foto ${posicion}`}
+              etiquetaAntes="La foto real"
+              etiquetaDespues="Lo que se publica"
+            />
           ) : (
             <img
               src={image.urlLarge ?? image.url}
@@ -279,87 +162,167 @@ export function FichaFoto({
             />
           )}
 
-          {revelado && revelado.estado !== 'HECHO' && revelado.motivo && (
-            <p className="text-xs text-muted-foreground">
-              {revelado.estado === 'OMITIDO'
-                ? `No se reveló: ${revelado.motivo}`
-                : `El revelado falló: ${revelado.motivo}`}
-            </p>
-          )}
+          {/* --- 1. el revelado ------------------------------------------- */}
+          <section className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
+            <div className="min-w-0">
+              <h4 className="flex items-center gap-1.5 text-sm font-medium">
+                <SunMedium className="size-4 text-muted-foreground" aria-hidden /> Revelado
+              </h4>
+              <p className="text-xs text-muted-foreground">
+                {!revelada
+                  ? 'Esta foto no se ha revelado.'
+                  : ajustes.length === 0
+                    ? /* El caso bueno, y hay que decirlo con todas las letras:
+                         «revelada y no hacía falta tocarla» y «sin revelar» se
+                         ven igual si solo se mira lo que se le hizo. */
+                      'Se reveló y no hacía falta tocarla: la foto está como salió de la cámara.'
+                    : `${ajustes.join(' · ')} · niveles, balance y gamma; el encuadre no se toca.`}
+              </p>
+            </div>
+            {editable && (
+              <Button
+                variant="outline"
+                size="sm"
+                disabled={ocupado}
+                onClick={() =>
+                  void conCuidado(
+                    () => apiRetoque.revelar(propertyId, image.id, !revelada || ajustes.length === 0),
+                    'No se pudo cambiar el revelado.',
+                  )
+                }
+              >
+                <Undo2 />
+                {revelada && ajustes.length > 0 ? 'Publicar el original' : 'Revelar'}
+              </Button>
+            )}
+          </section>
 
-          {/* --- 2. la propuesta: dos listas, dos destinatarios ------------ */}
-          {propuesta && (
-            <ListasPropuesta
-              sugerencias={propuesta.sugerencias}
-              metricas={propuesta.metricas}
-              accionAuto={
-                editable &&
-                autoPendientes > 0 && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    loading={ocupado}
-                    onClick={() => void aplicarAutomaticas()}
-                  >
-                    Aplicarlo ahora
+          {/* --- 2. el encuadre ------------------------------------------- */}
+          {encuadre && (
+            <BloqueEncuadre
+              encuadre={encuadre}
+              accion={
+                encuadre.cortes.length > 0 && (
+                  /* Y este botón NO aplica: enseña. Ese es el punto entero de
+                     la pieza — el recorte se ve antes de decidirlo, porque
+                     leyendo la frase que lo describe no se distingue el bueno
+                     del que se come una ventana. */
+                  <Button variant="outline" size="sm" onClick={() => setViendoRecorte(true)}>
+                    <Crop /> Ver cómo queda
                   </Button>
                 )
               }
             />
           )}
 
-          {/* --- 3. el retoque con IA: lo único que cuesta dinero ---------- */}
-          {estadoRetoque?.enabled && editable && !cargandoTrabajo && (
-            <div ref={bloqueRetoque}>
-              <BloqueRetoque
-                estado={estadoRetoque}
-                trabajo={trabajo}
-                ocupado={ocupado}
-                baseComparacion={
-                  revelada && revelado
-                    ? revelado.urlDespues
-                    : (image.urlLarge ?? image.url)
-                }
-                onPedir={() => setConfirmando(true)}
-                onDecidir={(acepta) => void decidir(acepta)}
-                onDeshacer={() => void deshacerRetoque()}
-              />
-            </div>
+          {/* --- 3. el retoque con IA ------------------------------------- */}
+          {retoqueHabilitado && editable && historial !== null && (
+            <BloqueRetoque
+              image={image}
+              pendiente={pendiente}
+              aplicado={aplicado}
+              historial={historial}
+              costeAnalisisUsd={costeAnalisisUsd}
+              ocupado={ocupado}
+              onPedir={(instruccion, asumida) =>
+                void conCuidado(async () => {
+                  const fila = await apiRetoque.retocar(image.id, instruccion, asumida);
+                  setHistorial((previo) => [fila, ...(previo ?? [])]);
+                }, 'No se pudo lanzar el retoque.')
+              }
+              onDecidir={(id, acepta) =>
+                void conCuidado(async () => {
+                  const fila = acepta
+                    ? await apiRetoque.aplicar(id)
+                    : await apiRetoque.descartar(id);
+                  setHistorial((previo) =>
+                    (previo ?? []).map((f) => (f.id === fila.id ? fila : f)),
+                  );
+                }, 'No se pudo guardar la decisión.')
+              }
+              onRevertir={(id) =>
+                void conCuidado(async () => {
+                  const fila = await apiRetoque.revertir(id);
+                  setHistorial((previo) =>
+                    (previo ?? []).map((f) => (f.id === fila.id ? fila : f)),
+                  );
+                }, 'No se pudo volver a la foto original.')
+              }
+            />
           )}
         </div>
 
-        {/* Lo que cuesta, delante del botón que lo gasta. */}
-        {confirmando && estadoRetoque && (
-          <Dialog open onOpenChange={(abierto) => !abierto && setConfirmando(false)}>
-            <DialogContent className="max-w-md gap-3 p-5">
-              <DialogTitle className="text-sm font-medium">
-                Retocar esta foto con IA
-              </DialogTitle>
-              <div className="flex flex-col gap-3 text-sm">
-                <p>
-                  Esta llamada cuesta{' '}
-                  <strong className="whitespace-nowrap">
-                    {costeEnPalabras(estadoRetoque)}
-                  </strong>
-                  , y se paga aunque el resultado no te guste.
-                </p>
-                <p className="text-muted-foreground">
-                  La IA no corrige la foto: genera una nueva a partir de ella. Puede
-                  añadir cosas que en la casa no están. Lo que salga no se publica hasta
-                  que lo aceptes, y el original se guarda.
-                </p>
-              </div>
-              <div className="flex justify-end gap-2">
-                <Button variant="outline" onClick={() => setConfirmando(false)}>
-                  Cancelar
-                </Button>
-                <Button loading={ocupado} onClick={() => void lanzarRetoque()}>
-                  <Wand2 /> Retocar por {importe(estadoRetoque)}
-                </Button>
-              </div>
-            </DialogContent>
-          </Dialog>
+        {viendoRecorte && encuadre && (
+          <ConfirmarRecorte
+            image={image}
+            encuadre={encuadre}
+            ocupado={ocupado}
+            onClose={() => setViendoRecorte(false)}
+            onAplicar={() =>
+              void conCuidado(async () => {
+                await apiRetoque.recortar(
+                  image.id,
+                  encuadre.cortes.map((c) => ({ borde: c.borde, porcion: c.porcion })),
+                );
+                setViendoRecorte(false);
+              }, 'No se pudo aplicar el recorte.')
+            }
+          />
         )}
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+/**
+ * El recorte, a la vista, antes de tocar nada.
+ *
+ * No hay camino que aplique un recorte sin pasar por aquí. Es la única
+ * salvaguarda que se sabe que funciona: sobre 23 fotos reales, los recortes que
+ * salían mal no se distinguían de los buenos por su descripción, solo por su
+ * resultado.
+ */
+function ConfirmarRecorte({
+  image,
+  encuadre,
+  ocupado,
+  onClose,
+  onAplicar,
+}: {
+  image: MediaImage;
+  encuadre: Encuadre;
+  ocupado: boolean;
+  onClose: () => void;
+  onAplicar: () => void;
+}) {
+  const perdido = superficiePerdida(encuadre.cortes);
+  return (
+    <Dialog open onOpenChange={(abierto) => !abierto && onClose()}>
+      <DialogContent className="max-w-2xl gap-3 p-4">
+        <DialogTitle className="pr-10 text-sm font-medium">
+          Así quedaría con el recorte
+        </DialogTitle>
+        {/* La grande y no la miniatura: aquí se está buscando el detalle que se
+            pierde, y a 560 px una ventana en el borde no se ve. */}
+        <Recorte
+          url={image.urlLarge ?? image.url}
+          alt={image.description ?? 'Foto del inmueble'}
+          cortes={encuadre.cortes}
+        />
+        <p className="text-xs text-muted-foreground">
+          Mira lo oscurecido antes de aceptar: es lo que desaparece. Probando estas
+          propuestas sobre fotos reales, varias que sonaban razonables se comían algo
+          que importaba —una ventana, medio espejo—, y eso no se ve leyendo, solo
+          mirando.
+        </p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button variant="outline" onClick={onClose}>
+            No recortar
+          </Button>
+          <Button disabled={ocupado} onClick={onAplicar}>
+            <Crop /> Recortar y tirar ese {perdido}%
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );
@@ -368,126 +331,269 @@ export function FichaFoto({
 /**
  * El botón caro y lo que pasa después.
  *
- * Tres estados y cada uno tiene una única acción evidente: pedirlo, decidirlo,
- * deshacerlo. Lo que no existe es un camino en el que el resultado se publique
- * sin que nadie lo haya mirado.
+ * Se pide con texto libre y no con un menú de acciones a propósito: un
+ * desplegable convertiría «quitar la humedad del techo» en una opción oficial
+ * de la agencia. Con texto libre el asesor pide lo que necesita y el servidor
+ * clasifica lo que pidió — y esa clasificación llega MIENTRAS se escribe,
+ * gratis, no después de haber cobrado.
  */
 function BloqueRetoque({
-  estado,
-  trabajo,
+  image,
+  pendiente,
+  aplicado,
+  historial,
+  costeAnalisisUsd,
   ocupado,
-  baseComparacion,
   onPedir,
   onDecidir,
-  onDeshacer,
+  onRevertir,
 }: {
-  estado: EstadoModuloRetoque;
-  trabajo: Retoque | null;
+  image: MediaImage;
+  pendiente: Retoque | null;
+  aplicado: Retoque | null;
+  historial: Retoque[];
+  costeAnalisisUsd: number | null;
   ocupado: boolean;
-  /** Con qué se compara el resultado: lo que se publica ahora mismo. */
-  baseComparacion: string;
-  onPedir: () => void;
-  onDecidir: (acepta: boolean) => void;
-  onDeshacer: () => void;
+  onPedir: (instruccion: string, asumida: boolean) => void;
+  onDecidir: (id: string, acepta: boolean) => void;
+  onRevertir: (id: string) => void;
 }) {
-  if (trabajo?.estado === 'PROCESANDO') {
-    return (
-      <Alert tone="warn">
-        La IA está generando la foto. Ya está pagada: no hace falta volver a pulsar. Esto
-        tarda entre unos segundos y un par de minutos.
-      </Alert>
-    );
-  }
+  const [instruccion, setInstruccion] = useState('');
+  const [asumida, setAsumida] = useState(false);
+  const [previo, setPrevio] = useState<PrevioRetoque | null>(null);
+  const texto = useDebounced(instruccion.trim(), 400);
 
-  if (trabajo?.estado === 'FALLIDO') {
-    return (
-      <Alert
-        tone="error"
-        action={
-          <Button size="sm" variant="outline" onClick={onPedir}>
-            Volver a intentarlo
-          </Button>
-        }
-      >
-        El retoque falló{trabajo.motivo ? `: ${trabajo.motivo}` : '.'}
-      </Alert>
-    );
-  }
+  /*
+    La clasificación, mientras se escribe.
 
-  if (trabajo?.estado === 'ACEPTADO') {
-    return (
-      <section className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-3">
-        <p className="text-sm text-amber-900">
-          {/* Que esté marcada no es un detalle de la ficha: es lo que separa un
-              catálogo honesto de uno que enseña casas que no existen. */}
-          Lo que se publica de esta foto es un retoque generado por IA
-          {trabajo.createdAt ? ` el ${dateTime(trabajo.createdAt)}` : ''}. Sale marcada en
-          la galería para que se sepa.
-        </p>
-        <Button
-          variant="outline"
-          size="sm"
-          className="self-start"
-          disabled={ocupado}
-          onClick={onDeshacer}
-        >
-          <Undo2 /> Volver a la foto original
-        </Button>
-      </section>
-    );
-  }
+    No llama al modelo y no cuesta nada, así que el aviso de «esto altera la
+    realidad» puede llegar cuando todavía se puede cambiar la frase — que es el
+    único momento en el que sirve de algo. Después de pagar ya no es un aviso,
+    es un reproche.
+  */
+  useEffect(() => {
+    if (texto.length < 3) {
+      setPrevio(null);
+      return;
+    }
+    let vigente = true;
+    apiRetoque
+      .previoRetoque(texto)
+      .then((res) => {
+        // La respuesta de una frase que ya no esta escrita se tira: si no, el
+        // aviso puede acabar hablando de un texto anterior.
+        if (vigente) setPrevio(res);
+      })
+      .catch(() => {
+        /* Sin clasificación se sigue pudiendo pedir: el servidor la repite y
+           es él quien impone la confirmación, no esta pantalla. */
+      });
+    return () => {
+      vigente = false;
+    };
+  }, [texto]);
 
-  if (trabajo?.estado === 'LISTO' && trabajo.urlResultado) {
+  /* Al cambiar la frase, la confirmación vuelve a cero: se asume lo que se
+     leyó, no lo que se escribió después. */
+  useEffect(() => setAsumida(false), [texto]);
+
+  const bloquePendiente = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (pendiente) {
+      bloquePendiente.current?.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+    }
+  }, [pendiente]);
+
+  const gastado = historial.reduce((suma, r) => suma + Number(r.costUsd || 0), 0);
+
+  if (pendiente && pendiente.retouchedSnapshot) {
     return (
-      <section className="flex flex-col gap-2 rounded-md border p-3">
+      <section ref={bloquePendiente} className="flex flex-col gap-2 rounded-md border p-3">
         <p className="text-sm font-medium">
           Esto es lo que ha salido. Todavía no se publica.
         </p>
+        <p className="text-xs text-muted-foreground">«{pendiente.instruction}»</p>
         <Comparador
-          antes={baseComparacion}
-          despues={trabajo.urlResultado}
+          antes={pendiente.originalSnapshot.urlLarge}
+          despues={pendiente.retouchedSnapshot.urlLarge}
           alt="Resultado del retoque con IA"
-          etiquetaAntes="Lo que hay"
+          etiquetaAntes="La foto real"
           etiquetaDespues="Retoque IA"
         />
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" disabled={ocupado} onClick={() => onDecidir(true)}>
+          <Button size="sm" disabled={ocupado} onClick={() => onDecidir(pendiente.id, true)}>
             <Check /> Publicar el retoque
           </Button>
           <Button
             variant="outline"
             size="sm"
             disabled={ocupado}
-            onClick={() => onDecidir(false)}
+            onClick={() => onDecidir(pendiente.id, false)}
           >
             <X /> Descartarlo
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Descartarlo no devuelve lo que costó: lo que se paga es generarlo. Publicarlo
-          deja la foto marcada como retocada con IA, y se puede deshacer después.
+          Costó {dolares(pendiente.costUsd)} y eso ya está pagado: descartarlo no lo
+          devuelve. Publicarlo deja la foto marcada como retocada con IA, y se puede
+          revertir después.
         </p>
       </section>
     );
   }
 
+  if (pendiente && !pendiente.retouchedSnapshot) {
+    return (
+      <Alert tone="error">
+        El último intento falló{pendiente.error ? `: ${pendiente.error}` : '.'} Se pagó igual
+        ({dolares(pendiente.costUsd)}).
+      </Alert>
+    );
+  }
+
   return (
-    <section className="flex flex-col gap-2 rounded-md border p-3">
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <div className="min-w-0">
-          <h4 className="text-sm font-medium">Retocar con IA</h4>
-          {/* El coste va aquí, en el mismo bloque que el botón y antes de él.
-              Es la diferencia entre pulsar y decidir. */}
-          <p className="text-xs text-muted-foreground">{costeEnPalabras(estado)}</p>
+    <section className="flex flex-col gap-3 rounded-md border p-3">
+      <div className="min-w-0">
+        <h4 className="flex items-center gap-1.5 text-sm font-medium">
+          <Wand2 className="size-4 text-muted-foreground" aria-hidden /> Retocar con IA
+        </h4>
+        <p className="text-xs text-muted-foreground">
+          Genera una foto nueva a partir de esta. Es lo caro de la pantalla y lo único
+          que puede cambiar lo que hay en la casa: se pide foto a foto, nunca en lote.
+        </p>
+      </div>
+
+      {aplicado && (
+        <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-3">
+          <p className="text-sm text-amber-900">
+            {/* Que esté marcada no es un detalle de la ficha: es lo que separa
+                un catálogo honesto de uno que enseña casas que no existen. */}
+            Lo que se publica de esta foto es un retoque: «{aplicado.instruction}»
+            {aplicado.decidedAt ? `, publicado el ${dateTime(aplicado.decidedAt)}` : ''}.
+          </p>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={KIND_TONO[aplicado.kind]}>
+              {aplicado.kind === 'REVELADO'
+                ? 'Revelado'
+                : aplicado.kind === 'ALTERACION'
+                  ? 'Altera la realidad'
+                  : 'Oculta un defecto'}
+            </Badge>
+            <Button
+              variant="outline"
+              size="sm"
+              disabled={ocupado}
+              onClick={() => onRevertir(aplicado.id)}
+            >
+              <Undo2 /> Volver a la foto real
+            </Button>
+          </div>
         </div>
-        <Button variant="outline" size="sm" disabled={ocupado} onClick={onPedir}>
-          <Wand2 /> Retocar esta foto
+      )}
+
+      <label className="flex flex-col gap-1 text-sm">
+        <span className="micro-label text-muted-foreground">Qué quieres que haga</span>
+        <Textarea
+          rows={2}
+          value={instruccion}
+          maxLength={1000}
+          placeholder="La alcoba salió muy oscura, sube la luz"
+          onChange={(e) => setInstruccion(e.target.value)}
+        />
+      </label>
+
+      {/* La frontera, dicha mientras todavía se puede cambiar la frase. */}
+      {previo && (
+        <div className="flex flex-col gap-1.5">
+          <div className="flex flex-wrap items-center gap-1.5 text-xs">
+            <Badge tone={KIND_TONO[previo.kind]}>{previo.kindLabel}</Badge>
+            {previo.motivos.map((motivo) => (
+              <span key={motivo} className="text-muted-foreground">
+                {motivo}
+              </span>
+            ))}
+          </div>
+          {previo.advertencia && (
+            <p className="flex items-start gap-1.5 text-xs text-amber-800">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              <span>{previo.advertencia}</span>
+            </p>
+          )}
+          {previo.requiereConfirmacion && (
+            /* No es un trámite: es el campo que convierte «la herramienta me
+               dejó» en una persona con nombre que dijo que sí. Queda guardado
+               con quien lo pulsó. */
+            <label className="flex items-start gap-2 text-xs">
+              <input
+                type="checkbox"
+                checked={asumida}
+                onChange={(e) => setAsumida(e.target.checked)}
+                className="mt-0.5 size-3.5"
+              />
+              <span>
+                Conozco este inmueble y asumo que la foto va a dejar de mostrarlo como
+                es. Queda guardado que lo dije yo.
+              </span>
+            </label>
+          )}
+        </div>
+      )}
+
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        {/* El coste, en el mismo bloque que el botón y antes de él. */}
+        <p className="text-xs text-muted-foreground">
+          {previo
+            ? costeEnPalabras(previo.costeOrientativoUsd, costeAnalisisUsd)
+            : 'Escribe qué quieres y te digo qué haría y cuánto cuesta, antes de gastar nada.'}
+          {gastado > 0 && ` · ya se ha gastado ${dolares(gastado)} en esta foto`}
+        </p>
+        <Button
+          size="sm"
+          disabled={
+            ocupado ||
+            texto.length < 3 ||
+            (previo?.requiereConfirmacion === true && !asumida)
+          }
+          onClick={() => onPedir(texto, asumida)}
+        >
+          <Wand2 />
+          {previo?.costeOrientativoUsd
+            ? `Retocar por ${dolares(previo.costeOrientativoUsd)}`
+            : 'Retocar esta foto'}
         </Button>
       </div>
-      <p className="text-xs text-muted-foreground">
-        Genera una foto nueva a partir de esta. Es lo caro de la pantalla y lo único que
-        cambia lo que ve un comprador: se pide foto a foto, nunca en lote.
-      </p>
+
+      {/* Los intentos anteriores, con lo que costaron. Una lista que solo
+          enseñara los aciertos no serviría para saber lo que cuesta esto. */}
+      {historial.length > 0 && (
+        <ul className="flex list-none flex-col gap-1 p-0 text-xs text-muted-foreground">
+          {historial.slice(0, 4).map((r) => (
+            <li key={r.id} className="flex flex-wrap items-center gap-1.5">
+              <span className="tabular">{dateTime(r.createdAt)}</span>
+              <span className="min-w-0 truncate">«{r.instruction}»</span>
+              <Badge tone={r.status === 'APLICADO' ? 'ink' : 'neutral'}>
+                {ESTADO_TEXTO[r.status] ?? r.status}
+              </Badge>
+              <span className="tabular">{dolares(r.costUsd)}</span>
+            </li>
+          ))}
+        </ul>
+      )}
+
+      {image.retouchId === null && historial.some((r) => r.status === 'REVERTIDO') && (
+        <p className="text-xs text-muted-foreground">
+          Esta foto estuvo retocada y se volvió a la de verdad. Lo que se publica ahora
+          es una fotografía.
+        </p>
+      )}
     </section>
   );
 }
+
+const ESTADO_TEXTO: Record<string, string> = {
+  PENDIENTE: 'sin decidir',
+  APLICADO: 'publicado',
+  DESCARTADO: 'descartado',
+  REVERTIDO: 'revertido',
+  FALLIDO: 'falló',
+};

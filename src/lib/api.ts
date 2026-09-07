@@ -528,21 +528,36 @@ export interface MediaImage {
   position: number;
   isMain: boolean;
   /**
-   * Lo que se publica de esta foto salio de un retoque generativo.
+   * La fila de retoque que produjo lo que hoy se publica de esta foto.
    *
-   * Opcional porque el modulo de retoque de la API se esta escribiendo ahora y
-   * los servidores que no lo tengan no van a mandar el campo. Ausente se lee
-   * como `false`, que es lo correcto: la inmensa mayoria de las 6.306 fotos del
-   * inventario son fotos.
+   * Mientras apunte a algo, esa imagen del catalogo NO es una fotografia: es lo
+   * que un modelo dibujo a partir de una. Nulo es el caso normal.
    *
    * Viaja en la imagen y no en el modulo de retoque a proposito. El problema
-   * que este campo resuelve —un catalogo donde no se distingue lo real de lo
-   * generado— no esta en la pantalla de retoque, esta en todas las demas: la
-   * rejilla, el visor y cualquier sitio donde alguien mire una foto sin haber
-   * abierto nunca esa pantalla.
+   * que resuelve —un catalogo donde no se distingue lo real de lo generado— no
+   * esta en la pantalla de retoque, esta en todas las demas: la rejilla, el
+   * visor y cualquier sitio donde alguien mire una foto sin haber abierto nunca
+   * esa pantalla.
+   *
+   * Opcional porque las galerias de proyecto y de tipologia no lo tienen: el
+   * retoque con IA solo existe para fotos de inmueble.
    */
-  aiEdited?: boolean;
-  aiEditedAt?: string | null;
+  retouchId?: string | null;
+  /**
+   * Cuando se revelo, y que se le hizo.
+   *
+   * Los dos hacen falta y no son el mismo dato: `develop` nulo con
+   * `developedAt` puesto es lo mejor que puede pasar —se miro y no hacia falta
+   * tocarla—, y los dos nulos son "no se ha revelado". Mirando solo `develop`
+   * esos dos casos se ven iguales.
+   */
+  developedAt?: string | null;
+  develop?: {
+    version: number;
+    niveles?: { g: number; b: number };
+    balance?: { r: number; g: number; b: number };
+    gamma?: number;
+  } | null;
 }
 
 /** La imagen de un inmueble. Es una `MediaImage` y no anade nada. */

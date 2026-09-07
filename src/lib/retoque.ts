@@ -1,32 +1,28 @@
-import { ApiError, api } from './api';
+import { ApiError, api, type MediaImage } from './api';
 
 /**
  * Lo que se le hace a una foto después de subirla, visto desde el panel.
  *
  * Son tres cosas distintas que la pantalla junta y que conviene no confundir:
  *
- * - El **revelado** es código: exposición, enderezado, recorte. No inventa
- *   nada, no cuesta nada y se aplica solo. Lo único que hace falta de él es
- *   poder comprobar que mejoró, y por eso lo que importa aquí son los dos
- *   lados —el antes y el después— y no los parámetros.
- * - La **propuesta** es un diagnóstico: qué le pasa a esta foto. Se parte en
- *   dos porque tiene dos destinatarios: lo que arregla una máquina y lo que
- *   exige que alguien vuelva a la casa con la cámara. Un listado mezclado no
- *   lo puede usar ninguno de los dos.
- * - El **retoque con IA** genera píxeles que no estaban. Cuesta entre 10 y 100
- *   veces el análisis, cambia la foto que ve un comprador, y por eso es lo
- *   único de los tres que no pasa sin que una persona diga que sí dos veces:
- *   una para pagarlo y otra para publicarlo.
+ * - El **revelado** es código: niveles, balance de blancos y gamma. No inventa
+ *   nada, no cuesta nada y se aplica solo al subir. Lo único que hace falta de
+ *   él es poder deshacerlo.
+ * - El **encuadre** es un diagnóstico: qué habría que recortar de esta foto y
+ *   qué no tiene arreglo sin volver a la casa. Viene dentro del análisis, no en
+ *   un módulo aparte.
+ * - El **retoque con IA** genera píxeles que no estaban. Cuesta unas cien veces
+ *   el análisis, cambia la foto que ve un comprador, y por eso no pasa sin que
+ *   una persona diga que sí dos veces: una para pagarlo y otra para publicarlo.
  *
  * Vive aparte de `imagenes-ia.ts` —que es el veredicto del modelo sobre la
  * galería— porque el vocabulario no se solapa: allí se habla de estancias,
- * portadas y privacidad; aquí de exposición, coste y marcha atrás. Y como
- * `imagenes-ia.ts`, es la única capa que conoce los nombres del servidor.
+ * portadas y privacidad; aquí de recortes, coste y marcha atrás.
  *
- * Los tres módulos de la API se están escribiendo en paralelo a esta pantalla.
- * De ahí `opcional()`: un 404 no es un fallo, es «este servidor todavía no
- * tiene esa parte», y la respuesta correcta es no pintar ese bloque en vez de
- * teñir de rojo una ficha de inmueble que por lo demás funciona.
+ * Y no toca `imagenes-ia.ts` para leer el encuadre, aunque el encuadre viaje
+ * dentro de esa misma respuesta: ese fichero lo está reescribiendo otro agente
+ * ahora mismo, y añadirle un campo era garantizarse un choque. `encuadreDe()`
+ * lo saca de la fila sin que aquel módulo tenga que enterarse.
  */
 
 const BASE = '/image-ai';
@@ -47,242 +43,356 @@ async function opcional<T>(llamada: Promise<T>): Promise<T | null> {
   }
 }
 
-// --- el revelado automático -------------------------------------------------
+// --- el encuadre: qué recortar y qué no tiene arreglo -----------------------
+
+/** Los cuatro bordes, como los nombra el servidor. */
+export type Borde = 'ARRIBA' | 'ABAJO' | 'IZQUIERDA' | 'DERECHA';
 
 /**
- * En qué punto está el revelado de una foto.
+ * A quién le toca arreglar esta foto. Es el campo que parte la pantalla en dos.
  *
- * `OMITIDO` no es un fallo y por eso no comparte cubo con `FALLIDO`: es «esta
- * foto no necesitaba nada» o «tocarla la habría empeorado», y merece leerse
- * distinto de «se intentó y salió mal».
+ * Lo decide el servidor y no un diccionario de aquí. Deducirlo del texto haría
+ * que un caso nuevo cayera en el cubo equivocado sin dar error, y el cubo
+ * equivocado es o prometer que un botón arregla lo que necesita una cámara, o
+ * mandar a alguien a cruzar Bucaramanga por un recorte.
  */
-export type EstadoRevelado = 'PENDIENTE' | 'HECHO' | 'FALLIDO' | 'OMITIDO';
+export type Via = 'PROGRAMA' | 'ASESOR' | 'REPETIR' | 'NADA';
 
-/** Un ajuste del revelado, ya redactado por el servidor. */
-export interface AjusteRevelado {
-  clave: string;
-  /** Cómo se llama en español: «Exposición», «Enderezado». */
-  etiqueta: string;
-  /** Ya formateado: «+0,4 EV», «1,8°». El panel no calcula unidades. */
-  valor: string;
-}
-
-export interface ReveladoImagen {
-  propertyImageId: string;
-  estado: EstadoRevelado;
-  /** Por qué se omitió o por qué falló, en español. */
-  motivo: string | null;
+/** Lo que el modelo propone recortar de un borde, contrastado con lo medido. */
+export interface Corte {
+  borde: Borde;
+  /** Lo que estima el modelo, en porcentaje del lado. */
+  porcion: number;
+  /** Qué hay en ese borde, en palabras del modelo. Es lo rebatible. */
+  que: string;
+  /** Lo que mide el código de franja plana en ese mismo borde. */
+  medido: number;
   /**
-   * Los cuatro tamaños, y los cuatro hacen falta.
+   * El código confirma la franja.
    *
-   * El «antes» necesita miniatura propia igual que el «después»: en el
-   * comparador es media pantalla, no una nota al pie. Y la rejilla pinta
-   * SIEMPRE los `thumb`: con 6.306 imágenes reales, pedir los de 1600 px para
-   * enseñar sellos de correos es lo que tumba la ficha.
+   * Ojo con leer esto como «se aplica solo»: en la pantalla significa «este
+   * corte es de fiar», no «este corte se ejecuta sin mirarlo». La diferencia no
+   * es de matiz — probando los recortes sobre 23 fotos reales, aplicados al pie
+   * de la letra varios salían peor: uno perdía la ventana de una alcoba, otro
+   * mordía un espejo. Y eso solo se vio renderizándolos: leyendo la frase que
+   * los describe, todos parecían razonables.
    */
-  thumbAntes: string;
-  thumbDespues: string;
-  urlAntes: string;
-  urlDespues: string;
-  ajustes: AjusteRevelado[];
-  createdAt: string;
-}
-
-export interface RevisionRevelado {
-  images: ReveladoImagen[];
-}
-
-export interface EstadoModuloRevelado {
-  enabled: boolean;
-  /** Si se aplica solo al subir. Cambia el texto: «se hizo» o «se puede hacer». */
   auto: boolean;
 }
 
-// --- la propuesta -----------------------------------------------------------
+export interface Encuadre {
+  via: Via;
+  cortes: Corte[];
+  /** Por qué la vía es la que es, en una frase, cuando no es obvio. */
+  motivo: string | null;
+}
 
 /**
- * A quién va dirigida una sugerencia. Es el campo que parte la pantalla en dos.
+ * Saca el encuadre de una fila de análisis sin acoplarse a su tipo.
  *
- * Lo decide el servidor y no un diccionario de aquí, y eso es deliberado: si el
- * panel dedujera el destino a partir del código, el día que la API añada un
- * código nuevo caería en el cubo equivocado sin dar error — y el cubo
- * equivocado aquí significa o bien prometer que un botón arregla algo que
- * necesita una cámara, o bien mandar a alguien a cruzar Bucaramanga por algo
- * que se resolvía con un recorte.
+ * La API lo devuelve dentro de cada `AnalisisImagen` de `/image-ai/properties/
+ * :id`, pero ese tipo vive en `imagenes-ia.ts` y no declara el campo. Se lee
+ * defensivamente porque los análisis anteriores a que existiera no lo traen:
+ * ausente es «no se preguntó», no «no hay nada que recortar».
  */
-export type DestinoSugerencia = 'AUTO' | 'REVISITA';
-
-export type SeveridadSugerencia = 'ALTA' | 'MEDIA' | 'BAJA';
-
-export interface Sugerencia {
-  id: string;
-  destino: DestinoSugerencia;
-  /** Familia del problema. Solo se usa para el icono: uno desconocido no rompe. */
-  codigo: string;
-  /** Una línea en español. Es lo que se lee. */
-  titulo: string;
-  detalle: string | null;
-  severidad: SeveridadSugerencia;
+export function encuadreDe(fila: unknown): Encuadre | null {
+  const marco = (fila as { framing?: Encuadre | null } | null)?.framing;
+  if (!marco || !Array.isArray(marco.cortes)) return null;
+  return marco;
 }
 
-/** Lo medido, no lo opinado. Va al lado de la frase para que se pueda discutir. */
-export interface MetricasImagen {
-  anchura: number;
-  altura: number;
-  /** Ancho partido por alto. 1,33 es un 4:3; 2,3 es una franja. */
-  aspecto: number;
-  nitidez: number | null;
-  brillo: number | null;
+/**
+ * Lo que queda de la foto tras aplicar unos cortes, en porcentajes CSS.
+ *
+ * Es todo lo que hace falta para dibujar el recorte exacto encima de la
+ * miniatura que ya está cargada: sin llamar a nadie, sin coste y sin esperar a
+ * que exista la ruta que lo aplica. La previsualización no es un adorno, es la
+ * única forma conocida de cazar un recorte malo — leyendo la frase no se caza.
+ */
+export function marco(cortes: Corte[]): {
+  arriba: number;
+  abajo: number;
+  izquierda: number;
+  derecha: number;
+} {
+  const de = (borde: Borde) =>
+    cortes.find((c) => c.borde === borde)?.porcion ?? 0;
+  return {
+    arriba: de('ARRIBA'),
+    abajo: de('ABAJO'),
+    izquierda: de('IZQUIERDA'),
+    derecha: de('DERECHA'),
+  };
 }
 
-export interface PropuestaImagen {
-  propertyImageId: string;
-  metricas: MetricasImagen | null;
-  sugerencias: Sugerencia[];
+/** Cuánto de la foto se tira, en porcentaje de superficie. */
+export function superficiePerdida(cortes: Corte[]): number {
+  const m = marco(cortes);
+  const queda =
+    ((100 - m.arriba - m.abajo) / 100) * ((100 - m.izquierda - m.derecha) / 100);
+  return Math.round((1 - queda) * 100);
 }
 
-export interface RevisionPropuesta {
-  images: PropuestaImagen[];
-  generatedAt: string | null;
+export const BORDE_LABEL: Record<Borde, string> = {
+  ARRIBA: 'arriba',
+  ABAJO: 'abajo',
+  IZQUIERDA: 'la izquierda',
+  DERECHA: 'la derecha',
+};
+
+// --- el revelado ------------------------------------------------------------
+
+/**
+ * Qué se le hizo a la foto al reveladla, tal cual lo guardó el servidor.
+ *
+ * Nulo con `developedAt` puesto es lo mejor que puede pasar: se miró y no hacía
+ * falta tocarla. Nulo con `developedAt` también nulo es «no se ha revelado».
+ * Se ven igual si solo se mira este campo, y por eso hacen falta los dos.
+ */
+export interface Revelado {
+  version: number;
+  niveles?: { g: number; b: number };
+  balance?: { r: number; g: number; b: number };
+  gamma?: number;
+}
+
+/**
+ * El revelado en palabras, ya redactado aquí porque el servidor manda números.
+ *
+ * Devuelve lista vacía cuando no se tocó nada, que es distinto de no haberla
+ * revelado: eso lo distingue quien llama, mirando `developedAt`.
+ */
+export function reveladoEnPalabras(revelado: Revelado | null): string[] {
+  if (!revelado) return [];
+  const dichos: string[] = [];
+  if (revelado.niveles) {
+    /* La ganancia del estirado de niveles. 1,0 es «no se tocó». */
+    const porcentaje = Math.round((revelado.niveles.g - 1) * 100);
+    if (porcentaje !== 0) dichos.push(`Contraste ${porcentaje > 0 ? '+' : ''}${porcentaje}%`);
+  }
+  if (revelado.balance) {
+    const { r, b } = revelado.balance;
+    /* Más rojo que azul es calentar; al revés, enfriar. Es la lectura que
+       tiene un fotógrafo, y el número crudo no se la da a nadie. */
+    if (Math.abs(r - b) > 0.02) dichos.push(r > b ? 'Balance más cálido' : 'Balance más frío');
+  }
+  if (revelado.gamma && revelado.gamma !== 1) {
+    dichos.push(revelado.gamma > 1 ? 'Sombras levantadas' : 'Medios bajados');
+  }
+  return dichos;
 }
 
 // --- el retoque con IA ------------------------------------------------------
 
 /**
- * El ciclo de un retoque.
+ * Qué se le pidió de verdad a la IA. Es la frontera entre revelar y falsear.
  *
- * `LISTO` es el estado que justifica que esto exista: el resultado está hecho y
- * pagado, pero NO publicado. Sin ese paso intermedio, pulsar un botón cambiaría
- * la foto que ve un comprador sin que nadie la haya mirado.
+ * No es una etiqueta decorativa: decide si hace falta una confirmación extra y
+ * con qué severidad queda marcada la foto. Un comprador va a ir a esa casa.
  */
-export type EstadoRetoque =
-  | 'PROCESANDO'
-  | 'LISTO'
-  | 'ACEPTADO'
+export type RetouchKind = 'REVELADO' | 'ALTERACION' | 'OCULTA_DEFECTO';
+
+export type RetouchStatus =
+  | 'PENDIENTE'
+  | 'APLICADO'
   | 'DESCARTADO'
+  | 'REVERTIDO'
   | 'FALLIDO';
+
+/** Las urls de una versión de la foto, tal cual están en disco. */
+export interface Instantanea {
+  storageKey: string;
+  url: string;
+  urlMedium: string | null;
+  urlLarge: string;
+  urlOriginal: string;
+  width: number | null;
+  height: number | null;
+  bytes: number | null;
+  checksum: string | null;
+}
 
 export interface Retoque {
   id: string;
   propertyImageId: string;
-  estado: EstadoRetoque;
-  motivo: string | null;
-  thumbResultado: string | null;
-  urlResultado: string | null;
-  /** Lo que costó de verdad esta llamada, no la estimación. */
-  coste: number | null;
-  moneda: string;
+  propertyId: string;
+  /** Lo que se pidió, en las palabras de quien lo pidió. */
+  instruction: string;
+  kind: RetouchKind;
+  /** Por qué se clasificó así. Es lo que hace discutible la etiqueta. */
+  motivos: string[];
+  model: string;
+  quality: string;
+  /** Llega como cadena: en la base es `numeric` y el driver no lo redondea. */
+  costUsd: string;
+  /** La foto tal como estaba antes. Es el «antes» del comparador. */
+  originalSnapshot: Instantanea;
+  /** El candidato. Nulo si falló o si ya se descartó y se limpió. */
+  retouchedSnapshot: Instantanea | null;
+  status: RetouchStatus;
+  requestedByAgentId: string;
+  decidedByAgentId: string | null;
+  decidedAt: string | null;
+  alteracionAsumida: boolean;
+  error?: string | null;
   createdAt: string;
 }
 
-export interface EstadoModuloRetoque {
-  /** Sin clave del proveedor esto es `false` y no se ofrece el botón. */
-  enabled: boolean;
-  /** Lo que cuesta un retoque. Se pinta ANTES de pulsar, no después. */
-  coste: number;
-  moneda: string;
-  /**
-   * Lo que cuesta analizar una foto.
-   *
-   * Está aquí porque una cifra suelta no le dice nada a un asesor: «0,04 USD»
-   * no se sabe si es caro. «Cuesta 40 veces lo que analizarla» sí. Si el
-   * servidor no lo manda, la comparación no se enseña — nunca se inventa.
-   */
-  costeAnalisis: number | null;
+/**
+ * Lo que haría una instrucción, sin hacerla.
+ *
+ * No llama al modelo y no cuesta nada. Existe para que el aviso llegue MIENTRAS
+ * se escribe y no después de cobrar, que es cuando ya da igual.
+ */
+export interface PrevioRetoque {
+  kind: RetouchKind;
+  kindLabel: string;
+  motivos: string[];
+  advertencia: string | null;
+  /** Si hará falta marcar la casilla de «sé lo que estoy haciendo». */
+  requiereConfirmacion: boolean;
+  costeOrientativoUsd: number | null;
+  model: string;
+  quality: string;
 }
+
+export interface ResumenRetoque {
+  intentos: number;
+  aplicados: number;
+  /** Suma de TODO lo intentado: un descarte también se pagó. */
+  costeTotalUsd: string;
+  alteranLaRealidad: number;
+}
+
+/** Lo que `/image-ai/status` dice del retoque. El resto lo lee `imagenes-ia`. */
+export interface EstadoRetoque {
+  enabled: boolean;
+  kinds: { value: RetouchKind; label: string }[];
+}
+
+export const KIND_TONO: Record<RetouchKind, 'green' | 'amber' | 'red'> = {
+  REVELADO: 'green',
+  ALTERACION: 'amber',
+  OCULTA_DEFECTO: 'red',
+};
 
 // --- llamadas ---------------------------------------------------------------
 
 export const retoque = {
-  /** `null` = este servidor no revela. No es un error. */
-  estadoRevelado: (signal?: AbortSignal) =>
-    opcional(api.get<EstadoModuloRevelado>(`${BASE}/revelado/status`, undefined, signal)),
-
-  revelado: (propertyId: string, signal?: AbortSignal) =>
+  /**
+   * Si el retoque con IA esta disponible en este servidor.
+   *
+   * Se pide aparte y con tipo propio en vez de reutilizar `imagenesIA.estado`,
+   * que llama a la misma ruta: aquel tipo no declara `retouch` y ampliarlo
+   * significaria tocar `imagenes-ia.ts`, que esta reescribiendo otro agente.
+   * Una peticion mas a una ruta que no cuesta nada es mejor que un choque.
+   */
+  estado: (signal?: AbortSignal) =>
     opcional(
-      api.get<RevisionRevelado>(
-        `${BASE}/revelado/properties/${propertyId}`,
-        undefined,
-        signal,
-      ),
+      api.get<{ retouch?: EstadoRetoque }>(`${BASE}/status`, undefined, signal),
     ),
 
-  /** Rehacer el revelado. No llama a ningún modelo: es sharp, y no se cobra. */
-  revelar: (propertyId: string, opciones: { imageIds?: string[]; force?: boolean }) =>
-    api.post<RevisionRevelado>(`${BASE}/revelado/properties/${propertyId}`, opciones),
+  /**
+   * Revelar la foto o quitarle el revelado.
+   *
+   * Devuelve la imagen con las urls reversionadas, así que el navegador recarga
+   * la miniatura solo: no hace falta inventarse un parámetro anticaché.
+   */
+  revelar: (propertyId: string, imageId: string, aplicar: boolean) =>
+    api.patch<MediaImage>(`/properties/${propertyId}/images/${imageId}/develop`, {
+      aplicar,
+    }),
 
-  /** Deshacer el revelado de una foto: se publica el original tal cual llegó. */
-  descartarRevelado: (imageId: string) =>
-    api.delete<unknown>(`${BASE}/revelado/images/${imageId}`),
+  /**
+   * Aplicar unos cortes concretos.
+   *
+   * Se mandan las porciones en el cuerpo y no se dejan al servidor porque lo
+   * que se aplica no siempre es lo que se propuso: la persona puede aceptar
+   * unos cortes y descartar otros después de ver cómo queda.
+   *
+   * Esta ruta todavía no existe en la API. Está escrita contra el contrato
+   * pedido y devuelve 404 hasta que exista; quien la llama ya sabe leer ese
+   * 404 como «este servidor aún no», no como un fallo de quien pulsó.
+   */
+  recortar: (imageId: string, cortes: { borde: Borde; porcion: number }[]) =>
+    api.post<MediaImage>(`${BASE}/images/${imageId}/crop`, { cortes }),
 
-  propuesta: (propertyId: string, signal?: AbortSignal) =>
-    opcional(
-      api.get<RevisionPropuesta>(
-        `${BASE}/propuesta/properties/${propertyId}`,
-        undefined,
-        signal,
-      ),
-    ),
+  /**
+   * Gratis: clasifica el texto sin llamar al modelo.
+   *
+   * `api.post` no acepta señal de cancelacion, asi que quien la llama mientras
+   * se escribe tiene que descartar la respuesta que llegue tarde. Es lo que
+   * hace `FichaFoto`: sin eso, teclear rapido deja ganar a veces la
+   * clasificacion de una frase anterior, y el aviso de «esto altera la
+   * realidad» acabaria hablando de un texto que ya no esta.
+   */
+  previoRetoque: (instruction: string) =>
+    api.post<PrevioRetoque>(`${BASE}/retouch/preview`, { instruction }),
 
-  /** Esto sí mira las fotos y cuesta, aunque mucho menos que retocarlas. */
-  proponer: (propertyId: string, opciones: { imageIds?: string[]; force?: boolean }) =>
-    api.post<RevisionPropuesta>(`${BASE}/propuesta/properties/${propertyId}`, opciones),
-
-  estadoRetoque: (signal?: AbortSignal) =>
-    opcional(api.get<EstadoModuloRetoque>(`${BASE}/retoque/status`, undefined, signal)),
-
-  /** Lo que hay hecho o a medias de una foto. `null` también si nunca se retocó. */
-  retoqueDe: (imageId: string, signal?: AbortSignal) =>
-    opcional(api.get<Retoque>(`${BASE}/retoque/images/${imageId}`, undefined, signal)),
+  /** Todos los intentos de una foto, incluidos los descartados y los fallidos. */
+  retoquesDe: (imageId: string, signal?: AbortSignal) =>
+    opcional(api.get<Retoque[]>(`${BASE}/images/${imageId}/retouches`, undefined, signal)),
 
   /** Aquí se gasta. El coste va delante del botón que llama a esto. */
-  retocar: (imageId: string, sugerenciaIds?: string[]) =>
-    api.post<Retoque>(`${BASE}/retoque/images/${imageId}`, { sugerenciaIds }),
+  retocar: (imageId: string, instruction: string, alteracionAsumida: boolean) =>
+    api.post<Retoque>(`${BASE}/images/${imageId}/retouch`, {
+      instruction,
+      alteracionAsumida,
+    }),
 
   /** La segunda decisión: esto es lo que publica el resultado. */
-  aceptar: (retoqueId: string) =>
-    api.post<Retoque>(`${BASE}/retoque/${retoqueId}/accept`),
+  aplicar: (retoqueId: string) =>
+    api.post<Retoque>(`${BASE}/retouches/${retoqueId}/apply`),
 
   descartar: (retoqueId: string) =>
-    api.post<Retoque>(`${BASE}/retoque/${retoqueId}/discard`),
+    api.post<Retoque>(`${BASE}/retouches/${retoqueId}/discard`),
 
-  /** La marcha atrás, también después de aceptar. */
-  volverAlOriginal: (imageId: string) =>
-    api.delete<unknown>(`${BASE}/retoque/images/${imageId}`),
+  /** La marcha atrás de un retoque ya publicado. No cuesta nada. */
+  revertir: (retoqueId: string) =>
+    api.post<Retoque>(`${BASE}/retouches/${retoqueId}/revert`),
+
+  resumen: (propertyId: string, signal?: AbortSignal) =>
+    opcional(
+      api.get<ResumenRetoque>(
+        `${BASE}/properties/${propertyId}/retouch-summary`,
+        undefined,
+        signal,
+      ),
+    ),
 };
 
 // --- lo que la pantalla necesita saber decir --------------------------------
 
 /**
- * El coste, en palabras que signifiquen algo.
+ * Un importe en dólares, con coma decimal.
  *
- * Una cifra sola no se sabe si es cara. El múltiplo sí: es la comparación que
- * el asesor ya tiene calibrada, porque el análisis lo lanza todos los días.
+ * En español el separador decimal es la coma, y `toFixed` da un punto. Con
+ * «0.18» delante, un asesor colombiano lee dieciocho, no dieciocho centésimas.
  */
-export function costeEnPalabras(estado: EstadoModuloRetoque): string {
-  if (!estado.costeAnalisis || estado.costeAnalisis <= 0) return importe(estado);
-  const veces = Math.round(estado.coste / estado.costeAnalisis);
-  if (veces < 2) return importe(estado);
-  return `${importe(estado)} · unas ${veces} veces lo que cuesta analizarla`;
+export function dolares(valor: number | string): string {
+  const numero = typeof valor === 'string' ? Number(valor) : valor;
+  if (!Number.isFinite(numero)) return '—';
+  return `${new Intl.NumberFormat('es-CO', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  }).format(numero)} USD`;
 }
 
 /**
- * La cifra sola, con coma decimal.
+ * El coste, en palabras que signifiquen algo.
  *
- * En español el separador decimal es la coma, y `toFixed` da un punto. Con
- * «0.42» delante, un asesor colombiano lee cuarenta y dos —no cuarenta y dos
- * centésimas—, que es justo el malentendido que no puede tener el número que
- * decide si se gasta o no.
+ * Una cifra sola no se sabe si es cara. El múltiplo sí: el análisis es lo que
+ * el asesor lanza todos los días, así que es la única escala que ya tiene
+ * calibrada. Si no se sabe lo que cuesta un análisis, no se inventa.
  */
-export function importe(estado: EstadoModuloRetoque): string {
-  const cifra = new Intl.NumberFormat('es-CO', {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  }).format(estado.coste);
-  return `${cifra} ${estado.moneda}`;
-}
-
-/** «2,33:1» a partir del número. Es lo que hace discutible un «muy apaisada». */
-export function aspectoEnPalabras(aspecto: number): string {
-  return `${aspecto.toFixed(2).replace('.', ',')}:1`;
+export function costeEnPalabras(
+  costeUsd: number | null,
+  costeAnalisisUsd: number | null,
+): string {
+  if (costeUsd === null) return 'coste desconocido';
+  const cifra = dolares(costeUsd);
+  if (!costeAnalisisUsd || costeAnalisisUsd <= 0) return cifra;
+  const veces = Math.round(costeUsd / costeAnalisisUsd);
+  if (veces < 2) return cifra;
+  return `${cifra} · unas ${veces} veces lo que cuesta analizarla`;
 }
