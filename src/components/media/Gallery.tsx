@@ -518,7 +518,7 @@ function Tile({
         acciones se ve siempre, y ahí abajo el distintivo quedaba tapado por los
         botones justo en la foto que más importa señalar.
       */}
-      {(plano || image.isMain || image.retouchId) && (
+      {(plano || image.isMain || image.aiEdited) && (
         <span className="absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
           {plano && <Badge tone="blue">Plano</Badge>}
           {image.isMain && <Badge tone="ink">Portada</Badge>}
@@ -529,7 +529,7 @@ function Tile({
             por alli la da por real: el asesor que la manda por WhatsApp, el que
             la sube a un portal y el comprador que llega a la casa.
           */}
-          {image.retouchId && (
+          {image.aiEdited && (
             <Badge tone="amber">
               <Wand2 className="size-3" aria-hidden /> IA
             </Badge>

@@ -1,5 +1,5 @@
 import { useMemo, useState } from 'react';
-import { Camera, Crop, SlidersHorizontal, Wand2 } from 'lucide-react';
+import { Crop, Eye, SlidersHorizontal, Wand2 } from 'lucide-react';
 
 import { Alert, Badge, Card } from '@/components/ui';
 import { type MediaImage } from '@/lib/api';
@@ -9,11 +9,15 @@ import { imagenesIA, type RevisionInmueble } from '@/lib/imagenes-ia';
 import {
   dolares,
   encuadreDe,
+  estadoRevelado,
+  partir,
   retoque as apiRetoque,
   superficiePerdida,
   type Encuadre,
   type EstadoRetoque,
+  type PropuestaImagen,
   type ResumenRetoque,
+  type RevisionPropuesta,
 } from '@/lib/retoque';
 import { FichaFoto } from './FichaFoto';
 import { cn } from '@/lib/utils';
@@ -64,6 +68,22 @@ export function RetoqueFotos({
     (signal) => apiRetoque.resumen(propertyId, signal),
     [propertyId],
   );
+  /*
+    Las dos listas vienen ya partidas de `/propuesta`, que es lo que el servidor
+    publica para esta pantalla: trae las tareas redactadas ("quitar el plástico
+    de las sillas") además de los recortes, y trae `destino` decidido por
+    construcción.
+
+    El análisis se sigue leyendo, pero solo por una cosa: la GEOMETRÍA. Las
+    sugerencias traen la frase del recorte y no cuánto ni de qué borde, y sin
+    esos números no se puede dibujar cómo va a quedar la foto — que es la única
+    forma conocida de cazar un recorte que se come una ventana. Las dos
+    llamadas son lecturas y ninguna cuesta nada.
+  */
+  const propuesta = useFetch<RevisionPropuesta | null>(
+    (signal) => apiRetoque.propuesta(propertyId, signal),
+    [propertyId],
+  );
 
   /**
    * El encuadre vigente de cada foto.
@@ -73,6 +93,11 @@ export function RetoqueFotos({
    * cuenta. Mismo criterio que usa `RevisionImagenes`: si se cambiara aquí, la
    * ficha enseñaría dos verdades distintas sobre la misma foto.
    */
+  const porPropuesta = useMemo(
+    () => new Map((propuesta.data?.images ?? []).map((p) => [p.propertyImageId, p])),
+    [propuesta.data],
+  );
+
   const porImagen = useMemo(() => {
     const mapa = new Map<string, Encuadre>();
     for (const fila of revision.data?.images ?? []) {
@@ -87,6 +112,7 @@ export function RetoqueFotos({
 
   function recargar() {
     revision.reload();
+    propuesta.reload();
     resumen.reload();
     onChange();
   }
@@ -96,12 +122,17 @@ export function RetoqueFotos({
   if (images.length === 0) return null;
 
   const retoqueHabilitado = estado.data?.retouch?.enabled === true;
-  const reveladas = images.filter((i) => i.developedAt != null).length;
-  const retocadas = images.filter((i) => i.retouchId).length;
+  const reveladas = images.filter((i) => estadoRevelado(i) !== 'SIN_REVELAR').length;
+  const retocadas = images.filter((i) => i.aiEdited ?? Boolean(i.retouchId)).length;
   const conRecorte = images.filter(
     (i) => (porImagen.get(i.id)?.cortes.length ?? 0) > 0,
   ).length;
-  const aRepetir = images.filter((i) => porImagen.get(i.id)?.via === 'REPETIR').length;
+  /* Las que piden que alguien las mire. Sale de la propuesta y no de `via`
+     porque la propuesta incluye también las tareas —desorden, luz— que el
+     encuadre no conoce. */
+  const aMirar = images.filter(
+    (i) => partir(porPropuesta.get(i.id)?.sugerencias ?? []).revisita.length > 0,
+  ).length;
 
   const foto = abierta ? images.find((i) => i.id === abierta) : null;
 
@@ -122,19 +153,19 @@ export function RetoqueFotos({
             : `${reveladas} de ${images.length} ${reveladas === 1 ? 'foto revelada' : 'fotos reveladas'}. `}
           El revelado —luz, contraste y color— se aplica solo al subir y se puede
           deshacer foto a foto; el encuadre no se toca nunca sin que alguien lo mire.
-          {aRepetir > 0 && (
+          {aMirar > 0 && (
             <>
               {' '}
               <strong className="font-medium text-foreground">
-                {aRepetir === 1
-                  ? 'Una foto pide volver a la casa'
-                  : `${aRepetir} fotos piden volver a la casa`}
+                {aMirar === 1
+                  ? 'Una foto pide que alguien la mire'
+                  : `${aMirar} fotos piden que alguien las mire`}
               </strong>
-              : eso no lo arregla ningún programa.
+              : unas hay que repetirlas en la casa y otras solo revisarlas.
             </>
           )}
-          {porImagen.size === 0 && revision.data !== null && (
-            <> Todavía no hay propuesta de encuadre: sale del análisis con IA de arriba.</>
+          {porPropuesta.size === 0 && (
+            <> Todavía no hay propuesta: sale del análisis con IA de aquí arriba.</>
           )}
         </p>
 
@@ -159,6 +190,7 @@ export function RetoqueFotos({
               image={image}
               indice={indice}
               encuadre={porImagen.get(image.id) ?? null}
+              propuesta={porPropuesta.get(image.id) ?? null}
               onAbrir={() => setAbierta(image.id)}
             />
           ))}
@@ -195,11 +227,12 @@ export function RetoqueFotos({
           posicion={images.findIndex((i) => i.id === foto.id) + 1}
           total={images.length}
           encuadre={porImagen.get(foto.id) ?? null}
+          propuesta={porPropuesta.get(foto.id) ?? null}
           retoqueHabilitado={retoqueHabilitado}
-          /* El coste de un análisis no lo publica la API todavía, así que la
-             comparación «cuesta N veces analizarla» no se enseña. Inventarla
-             sería peor que no darla. */
-          costeAnalisisUsd={null}
+          /* Si la API no lo publica, la comparación «cuesta N veces
+             analizarla» no se enseña y queda el importe solo. Inventarla sería
+             peor que no darla. */
+          costeAnalisisUsd={estado.data?.retouch?.costeAnalisisUsd ?? null}
           editable={puede}
           onClose={() => setAbierta(null)}
           onCambio={recargar}
@@ -221,22 +254,24 @@ function TileRetoque({
   image,
   indice,
   encuadre,
+  propuesta,
   onAbrir,
 }: {
   image: MediaImage;
   indice: number;
   encuadre: Encuadre | null;
+  propuesta: PropuestaImagen | null;
   onAbrir: () => void;
 }) {
-  const repetir = encuadre?.via === 'REPETIR';
+  const revisita = partir(propuesta?.sugerencias ?? []).revisita.length > 0;
   const cortes = encuadre?.cortes ?? [];
 
   return (
     <li
       className={cn(
         'relative aspect-[4/3] overflow-hidden rounded-md border bg-secondary',
-        repetir && 'border-amber-300',
-        image.retouchId && 'border-amber-400',
+        revisita && 'border-amber-300',
+        (image.aiEdited ?? Boolean(image.retouchId)) && 'border-amber-400',
       )}
     >
       <button
@@ -265,14 +300,14 @@ function TileRetoque({
       </span>
 
       <span className="pointer-events-none absolute top-1.5 right-1.5 flex flex-col items-end gap-1">
-        {image.retouchId && (
+        {(image.aiEdited ?? Boolean(image.retouchId)) && (
           <Badge tone="amber">
             <Wand2 className="size-3" aria-hidden /> IA
           </Badge>
         )}
-        {repetir && (
+        {revisita && (
           <Badge tone="amber">
-            <Camera className="size-3" aria-hidden /> Visita
+            <Eye className="size-3" aria-hidden /> Mirar
           </Badge>
         )}
       </span>

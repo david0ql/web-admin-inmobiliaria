@@ -79,7 +79,7 @@ export function Visor({
           {/* A tamano grande es donde alguien decide si esta foto vale para el
               portal, y por tanto donde mas falta hace saber que lo que esta
               mirando lo genero un modelo. */}
-          {image.retouchId && (
+          {image.aiEdited && (
             <Badge tone="amber">
               <Wand2 className="size-3" aria-hidden /> Retocada con IA
             </Badge>

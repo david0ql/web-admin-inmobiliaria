@@ -16,16 +16,17 @@ import { useDebounced } from '@/lib/useFetch';
 import {
   costeEnPalabras,
   dolares,
+  estadoRevelado,
   KIND_TONO,
-  reveladoEnPalabras,
   retoque as apiRetoque,
   superficiePerdida,
   type Encuadre,
   type PrevioRetoque,
+  type PropuestaImagen,
   type Retoque,
 } from '@/lib/retoque';
 import { Comparador } from './Comparador';
-import { BloqueEncuadre } from './Propuesta';
+import { ListasPropuesta } from './Propuesta';
 import { Recorte } from './Recorte';
 
 /**
@@ -52,6 +53,7 @@ export function FichaFoto({
   posicion,
   total,
   encuadre,
+  propuesta,
   retoqueHabilitado,
   costeAnalisisUsd,
   editable,
@@ -62,7 +64,10 @@ export function FichaFoto({
   image: MediaImage;
   posicion: number;
   total: number;
+  /** Solo la GEOMETRIA del recorte: cuánto y de qué borde. Para dibujarlo. */
   encuadre: Encuadre | null;
+  /** Las dos listas, ya partidas por el servidor. */
+  propuesta: PropuestaImagen | null;
   /** `/image-ai/status` dice si hay clave del proveedor. Sin ella no se ofrece. */
   retoqueHabilitado: boolean;
   /** Para poder decir «cuesta N veces analizarla». Sin él, solo la cifra. */
@@ -119,8 +124,12 @@ export function FichaFoto({
     }
   }
 
-  const revelada = image.developedAt != null;
-  const ajustes = reveladoEnPalabras(image.develop ?? null);
+  const revelado = estadoRevelado(image);
+  /* El texto lo redacta la API: `g: 1.197` no es «+0,4 EV» ni nada que suene a
+     cámara, es una recta, y traducirlo aquí acabaría diciendo otra cosa. */
+  const ajustes = image.develop?.resumen ?? [];
+  /* Solo hay cortina del revelado si hay diferencia Y se guardó el «antes». */
+  const hayComparacionRevelado = revelado === 'REVELADA' && Boolean(image.urlRawLarge);
   const pendiente = (historial ?? []).find((r) => r.status === 'PENDIENTE') ?? null;
   const aplicado = (historial ?? []).find((r) => r.id === image.retouchId) ?? null;
 
@@ -134,17 +143,26 @@ export function FichaFoto({
               {image.width} × {image.height} px
             </span>
           ) : null}
-          {image.retouchId && <Badge tone="amber">Retocada con IA</Badge>}
+          {image.aiEdited && <Badge tone="amber">Retocada con IA</Badge>}
         </DialogTitle>
 
         <div className="flex max-h-[75dvh] flex-col gap-4 overflow-y-auto">
           {error && <Alert tone="error">{error}</Alert>}
 
           {/*
+            UNA sola imagen arriba, y la elige lo que más compromete.
+
             Si lo que se publica es un retoque aplicado, la vista por defecto no
-            es la foto: es la comparación con la de verdad. Quien abre esta
-            ficha dentro de seis meses tiene que poder ver de un vistazo cuánto
-            se separó el anuncio del inmueble.
+            es la foto: es la comparación con la de verdad. Quien abra esta
+            ficha dentro de seis meses tiene que ver de un vistazo cuánto se
+            separó el anuncio del inmueble. Si no hay retoque pero sí revelado
+            con diferencia, la comparación es la del revelado.
+
+            Antes iban las dos —la foto grande y debajo el comparador—, y era
+            un error: dos imágenes de media pantalla apiladas empujaban la
+            propuesta y el botón de retoque fuera de la vista, y la de arriba no
+            aportaba nada que no estuviera ya en la mitad derecha de la de
+            abajo.
           */}
           {aplicado ? (
             <Comparador
@@ -153,6 +171,14 @@ export function FichaFoto({
               alt={image.description ?? `Foto ${posicion}`}
               etiquetaAntes="La foto real"
               etiquetaDespues="Lo que se publica"
+            />
+          ) : hayComparacionRevelado ? (
+            <Comparador
+              antes={image.urlRawLarge!}
+              despues={image.urlLarge ?? image.url}
+              alt={image.description ?? `Foto ${posicion}`}
+              etiquetaAntes="Sin revelar"
+              etiquetaDespues="Revelada"
             />
           ) : (
             <img
@@ -163,46 +189,64 @@ export function FichaFoto({
           )}
 
           {/* --- 1. el revelado ------------------------------------------- */}
-          <section className="flex flex-wrap items-center justify-between gap-2 rounded-md border p-3">
+          <section className="flex flex-wrap items-start justify-between gap-2 rounded-md border p-3">
             <div className="min-w-0">
               <h4 className="flex items-center gap-1.5 text-sm font-medium">
                 <SunMedium className="size-4 text-muted-foreground" aria-hidden /> Revelado
               </h4>
               <p className="text-xs text-muted-foreground">
-                {!revelada
-                  ? 'Esta foto no se ha revelado.'
-                  : ajustes.length === 0
-                    ? /* El caso bueno, y hay que decirlo con todas las letras:
-                         «revelada y no hacía falta tocarla» y «sin revelar» se
-                         ven igual si solo se mira lo que se le hizo. */
-                      'Se reveló y no hacía falta tocarla: la foto está como salió de la cámara.'
-                    : `${ajustes.join(' · ')} · niveles, balance y gamma; el encuadre no se toca.`}
+                {/* Tres situaciones y solo una tiene comparación que enseñar.
+                    Pintar la cortina en las otras dos sería comparar la foto
+                    consigo misma: peor que no comparar, porque da por
+                    demostrado algo que no se ha visto. */}
+                {revelado === 'SIN_REVELAR'
+                  ? 'Esta foto no ha pasado por el revelado: lo que se ve es el original.'
+                  : revelado === 'SIN_CAMBIOS'
+                    ? 'Se miró y no hacía falta tocarla: no hay antes y después que comparar.'
+                    : ajustes.length > 0
+                      ? ajustes.join(' · ')
+                      : 'Revelada.'}
               </p>
+              {/* En su propio párrafo: `resumen` son frases sueltas sin punto
+                  final, y pegarle una detrás dejaba «...tamaños reducidos La
+                  cortina de arriba...» sin separación ninguna. */}
+              {revelado === 'REVELADA' && !image.urlRawLarge && (
+                <p className="text-xs text-muted-foreground">
+                  De esta foto no se guardó la versión sin revelar, así que no se puede
+                  comparar: se reveló antes de que eso existiera.
+                </p>
+              )}
+              {hayComparacionRevelado && !aplicado && (
+                <p className="text-xs text-muted-foreground">
+                  La cortina de arriba es el antes y el después.
+                </p>
+              )}
             </div>
-            {editable && (
+            {editable && revelado !== 'SIN_REVELAR' && (
               <Button
                 variant="outline"
                 size="sm"
                 disabled={ocupado}
                 onClick={() =>
                   void conCuidado(
-                    () => apiRetoque.revelar(propertyId, image.id, !revelada || ajustes.length === 0),
+                    () => apiRetoque.revelar(propertyId, image.id, revelado !== 'REVELADA'),
                     'No se pudo cambiar el revelado.',
                   )
                 }
               >
                 <Undo2 />
-                {revelada && ajustes.length > 0 ? 'Publicar el original' : 'Revelar'}
+                {revelado === 'REVELADA' ? 'Publicar el original' : 'Volver a revelar'}
               </Button>
             )}
           </section>
 
           {/* --- 2. el encuadre ------------------------------------------- */}
-          {encuadre && (
-            <BloqueEncuadre
-              encuadre={encuadre}
-              accion={
-                encuadre.cortes.length > 0 && (
+          {propuesta && (
+            <ListasPropuesta
+              sugerencias={propuesta.sugerencias}
+              metricas={propuesta.metricas}
+              accionAuto={
+                encuadre && encuadre.cortes.length > 0 && (
                   /* Y este botón NO aplica: enseña. Ese es el punto entero de
                      la pieza — el recorte se ve antes de decidirlo, porque
                      leyendo la frase que lo describe no se distingue el bueno
@@ -433,10 +477,29 @@ function BloqueRetoque({
             <X /> Descartarlo
           </Button>
         </div>
+        {/*
+          El aviso que más importa de la pantalla, y va aquí y no arriba: aquí
+          es donde alguien está a punto de publicar.
+
+          No es una advertencia genérica sobre la IA. Está medido: aunque se le
+          ordene explícitamente no tocar nada más, el modelo redibuja la foto
+          ENTERA. En una sala real borró la cenefa tallada de un ventanal; en
+          una fachada borró la marca de agua de la agencia y repintó el
+          edificio. Por eso «resultado a la vista» no es un trámite: hay que
+          mirar la imagen, no leer lo que dice que hizo.
+        */}
+        <p className="flex items-start gap-1.5 text-xs text-amber-800">
+          <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+          <span>
+            Compara la foto entera, no solo lo que pediste: el modelo la redibuja
+            completa y cambia cosas que nadie le pidió. En pruebas se comió la cenefa
+            de un ventanal y borró la marca de agua de una fachada.
+          </span>
+        </p>
         <p className="text-xs text-muted-foreground">
           Costó {dolares(pendiente.costUsd)} y eso ya está pagado: descartarlo no lo
           devuelve. Publicarlo deja la foto marcada como retocada con IA, y se puede
-          revertir después.
+          revertir después — el original se guarda entero.
         </p>
       </section>
     );
@@ -580,7 +643,7 @@ function BloqueRetoque({
         </ul>
       )}
 
-      {image.retouchId === null && historial.some((r) => r.status === 'REVERTIDO') && (
+      {!image.aiEdited && historial.some((r) => r.status === 'REVERTIDO') && (
         <p className="text-xs text-muted-foreground">
           Esta foto estuvo retocada y se volvió a la de verdad. Lo que se publica ahora
           es una fotografía.

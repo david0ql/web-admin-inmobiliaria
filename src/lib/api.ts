@@ -528,28 +528,42 @@ export interface MediaImage {
   position: number;
   isMain: boolean;
   /**
+   * La foto SIN revelar: 560 px y 1600 px.
+   *
+   * Existen para poder comparar. Sin ellas, la unica forma de ver como era la
+   * foto antes del revelado era quitarselo de verdad —una escritura sobre el
+   * anuncio de un cliente para poder mirarlo—, y sin comparacion no hay manera
+   * de saber si el revelado mejoro la foto.
+   *
+   * Salen del negativo, que no cambia nunca: no llevan la marca `?r=` de las
+   * demas y no cambian al revelar ni al deshacer, asi que se pueden cachear.
+   *
+   * Nulas mientras la foto no haya pasado por el revelado. Ahi no hay "antes"
+   * que enseñar, porque lo que se ve YA es el antes.
+   */
+  urlRaw?: string | null;
+  urlRawLarge?: string | null;
+  /**
    * La fila de retoque que produjo lo que hoy se publica de esta foto.
    *
    * Mientras apunte a algo, esa imagen del catalogo NO es una fotografia: es lo
    * que un modelo dibujo a partir de una. Nulo es el caso normal.
    *
-   * Viaja en la imagen y no en el modulo de retoque a proposito. El problema
-   * que resuelve —un catalogo donde no se distingue lo real de lo generado— no
-   * esta en la pantalla de retoque, esta en todas las demas: la rejilla, el
-   * visor y cualquier sitio donde alguien mire una foto sin haber abierto nunca
-   * esa pantalla.
-   *
-   * Opcional porque las galerias de proyecto y de tipologia no lo tienen: el
-   * retoque con IA solo existe para fotos de inmueble.
+   * `aiEdited` es lo mismo ya resuelto a booleano, que es lo que necesita la
+   * rejilla; el id solo hace falta para buscar la fila. Los dos vienen de la
+   * API: aqui no se deriva uno del otro para no tener dos verdades.
    */
   retouchId?: string | null;
+  aiEdited?: boolean;
+  aiEditedAt?: string | null;
   /**
    * Cuando se revelo, y que se le hizo.
    *
    * Los dos hacen falta y no son el mismo dato: `develop` nulo con
    * `developedAt` puesto es lo mejor que puede pasar —se miro y no hacia falta
-   * tocarla—, y los dos nulos son "no se ha revelado". Mirando solo `develop`
-   * esos dos casos se ven iguales.
+   * tocarla, pasa en 4 de cada 150— y los dos nulos son "no se ha revelado".
+   * Mirando solo `develop` esos dos casos se ven iguales, y no lo son: en el
+   * primero el antes y el despues son la misma imagen.
    */
   developedAt?: string | null;
   develop?: {
@@ -557,7 +571,18 @@ export interface MediaImage {
     niveles?: { g: number; b: number };
     balance?: { r: number; g: number; b: number };
     gamma?: number;
+    /**
+     * Lo que se le hizo, ya redactado en español por la API.
+     *
+     * El texto sale de alli y no de aqui porque quien sabe que significan esos
+     * numeros es el codigo que los calculo: `g: 1.197` no es "+0,4 EV" ni nada
+     * que suene a camara, es una recta. Traduciendolo en el panel se acabaria
+     * diciendo algo distinto de lo que hizo el servidor.
+     */
+    resumen?: string[];
   } | null;
+  /** La caja del recorte aplicado, en fracciones. Nula si esta entera. */
+  crop?: { left: number; top: number; width: number; height: number } | null;
 }
 
 /** La imagen de un inmueble. Es una `MediaImage` y no anade nada. */

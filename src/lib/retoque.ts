@@ -43,18 +43,88 @@ async function opcional<T>(llamada: Promise<T>): Promise<T | null> {
   }
 }
 
+// --- la propuesta: las dos listas, ya partidas por el servidor -------------
+
+/**
+ * A quien va dirigida una sugerencia. Es el campo que parte la pantalla en dos.
+ *
+ * Lo decide el servidor por construccion y no un diccionario de aqui, y tiene
+ * una prueba que lo fija: si el panel lo dedujera del `codigo`, un codigo nuevo
+ * caeria en el cubo equivocado SIN dar error. Y el cubo equivocado es o
+ * prometer que un boton arregla lo que necesita una camara, o mandar a alguien
+ * a cruzar Bucaramanga por algo que se resolvia mirando la foto.
+ *
+ * A `AUTO` solo llega un recorte que el codigo ha confirmado midiendo los
+ * pixeles del borde. Todo lo demas —las tareas, las fotos a repetir y los
+ * recortes que el modelo propuso sin que el codigo los confirme— es `REVISITA`.
+ */
+export type Destino = 'AUTO' | 'REVISITA';
+
+export type Severidad = 'ALTA' | 'MEDIA' | 'BAJA';
+
+export interface Sugerencia {
+  /** Estable entre llamadas: se compone del analisis y de lo que describe. */
+  id: string;
+  destino: Destino;
+  /** Solo elige el icono. Uno desconocido pinta el generico y no rompe nada. */
+  codigo: string;
+  /** Una linea en español. Es lo que se lee. */
+  titulo: string;
+  detalle: string | null;
+  severidad: Severidad;
+}
+
+/**
+ * Lo medido de la foto. Va al lado de la frase para que se pueda discutir.
+ *
+ * Con una advertencia que hay que respetar al pintarlo: la nitidez tiene un
+ * falso positivo sistematico en este inventario —las salas VACIAS de pared
+ * blanca lisa hunden la varianza del laplaciano y puntuan como movidas estando
+ * perfectamente enfocadas—. Por eso este numero se enseña como dato y nunca se
+ * convierte aqui en un veredicto de «movida»: quien decide eso es el servidor,
+ * que ademas antepone «oscura» por el mismo motivo.
+ */
+export interface MetricasImagen {
+  anchura: number;
+  altura: number;
+  /** Ancho partido por alto. Da poco juego: 6.005 de las 6.306 fotos son 3:2. */
+  aspecto: number;
+  nitidez: number | null;
+  brillo: number | null;
+}
+
+export interface PropuestaImagen {
+  propertyImageId: string;
+  metricas: MetricasImagen | null;
+  sugerencias: Sugerencia[];
+}
+
+export interface RevisionPropuesta {
+  images: PropuestaImagen[];
+  /** Fecha del analisis mas reciente, o null si no hay ninguno. */
+  generatedAt: string | null;
+}
+
+/** Parte las sugerencias por su destino, conservando el orden del servidor. */
+export function partir(sugerencias: Sugerencia[]) {
+  return {
+    auto: sugerencias.filter((s) => s.destino === 'AUTO'),
+    revisita: sugerencias.filter((s) => s.destino === 'REVISITA'),
+  };
+}
+
 // --- el encuadre: qué recortar y qué no tiene arreglo -----------------------
 
 /** Los cuatro bordes, como los nombra el servidor. */
 export type Borde = 'ARRIBA' | 'ABAJO' | 'IZQUIERDA' | 'DERECHA';
 
 /**
- * A quién le toca arreglar esta foto. Es el campo que parte la pantalla en dos.
+ * En que deja el encuadre a la foto.
  *
- * Lo decide el servidor y no un diccionario de aquí. Deducirlo del texto haría
- * que un caso nuevo cayera en el cubo equivocado sin dar error, y el cubo
- * equivocado es o prometer que un botón arregla lo que necesita una cámara, o
- * mandar a alguien a cruzar Bucaramanga por un recorte.
+ * El encuadre sigue leyendose aunque las listas vengan ya partidas de
+ * `/propuesta`: es lo unico que trae la GEOMETRIA del recorte —cuanto y de que
+ * borde—, y sin eso no se puede dibujar como va a quedar la foto. Las
+ * sugerencias traen la frase; esto trae los numeros.
  */
 export type Via = 'PROGRAMA' | 'ASESOR' | 'REPETIR' | 'NADA';
 
@@ -157,29 +227,27 @@ export interface Revelado {
 }
 
 /**
- * El revelado en palabras, ya redactado aquí porque el servidor manda números.
+ * En que situacion esta el revelado de una foto. Son TRES y no dos.
  *
- * Devuelve lista vacía cuando no se tocó nada, que es distinto de no haberla
- * revelado: eso lo distingue quien llama, mirando `developedAt`.
+ * Distinguirlas importa porque solo una tiene comparacion que enseñar:
+ *
+ * - `SIN_REVELAR`: no ha pasado por el revelado. Lo que se ve YA es el antes,
+ *   asi que un comparador compararia la foto consigo misma.
+ * - `SIN_CAMBIOS`: se reveló y no hacia falta tocarla. Pasa en 4 de cada 150 y
+ *   es lo mejor que puede pasar. Tambien aqui el antes y el despues son
+ *   iguales, y lo honesto es decirlo en vez de pintar una cortina que no
+ *   enseña ninguna diferencia.
+ * - `REVELADA`: hay diferencia de verdad y se puede comparar.
  */
-export function reveladoEnPalabras(revelado: Revelado | null): string[] {
-  if (!revelado) return [];
-  const dichos: string[] = [];
-  if (revelado.niveles) {
-    /* La ganancia del estirado de niveles. 1,0 es «no se tocó». */
-    const porcentaje = Math.round((revelado.niveles.g - 1) * 100);
-    if (porcentaje !== 0) dichos.push(`Contraste ${porcentaje > 0 ? '+' : ''}${porcentaje}%`);
-  }
-  if (revelado.balance) {
-    const { r, b } = revelado.balance;
-    /* Más rojo que azul es calentar; al revés, enfriar. Es la lectura que
-       tiene un fotógrafo, y el número crudo no se la da a nadie. */
-    if (Math.abs(r - b) > 0.02) dichos.push(r > b ? 'Balance más cálido' : 'Balance más frío');
-  }
-  if (revelado.gamma && revelado.gamma !== 1) {
-    dichos.push(revelado.gamma > 1 ? 'Sombras levantadas' : 'Medios bajados');
-  }
-  return dichos;
+export type EstadoRevelado = 'SIN_REVELAR' | 'SIN_CAMBIOS' | 'REVELADA';
+
+export function estadoRevelado(image: {
+  developedAt?: string | null;
+  develop?: unknown;
+}): EstadoRevelado {
+  if (!image.developedAt) return 'SIN_REVELAR';
+  if (!image.develop) return 'SIN_CAMBIOS';
+  return 'REVELADA';
 }
 
 // --- el retoque con IA ------------------------------------------------------
@@ -268,6 +336,16 @@ export interface ResumenRetoque {
 export interface EstadoRetoque {
   enabled: boolean;
   kinds: { value: RetouchKind; label: string }[];
+  /**
+   * Lo que cuesta analizar una foto, para poder situar el precio del retoque.
+   *
+   * Opcional porque la API no lo publicaba al escribir esto. Sin él se enseña
+   * el importe a secas: «0,25 USD» no le dice a un asesor si es caro, pero
+   * inventarse el múltiplo sería peor que no darlo. Medido por quien lo cobra,
+   * el retoque anda por 0,245 USD y el análisis por 0,0005 — unas quinientas
+   * veces—, y por eso la frase importa: la intuición dice diez, no quinientas.
+   */
+  costeAnalisisUsd?: number | null;
 }
 
 export const KIND_TONO: Record<RetouchKind, 'green' | 'amber' | 'red'> = {
@@ -302,6 +380,25 @@ export const retoque = {
     api.patch<MediaImage>(`/properties/${propertyId}/images/${imageId}/develop`, {
       aplicar,
     }),
+
+  propuesta: (propertyId: string, signal?: AbortSignal) =>
+    opcional(
+      api.get<RevisionPropuesta>(
+        `${BASE}/propuesta/properties/${propertyId}`,
+        undefined,
+        signal,
+      ),
+    ),
+
+  /**
+   * Analizar y devolver la propuesta.
+   *
+   * Esto SI llama al modelo: unos 0,00074 USD por foto y 15-25 s por tanda de
+   * doce. Es barato, pero no gratis, y por eso lo dispara un boton y no la
+   * carga de la pantalla.
+   */
+  proponer: (propertyId: string, opciones: { imageIds?: string[]; force?: boolean }) =>
+    api.post<RevisionPropuesta>(`${BASE}/propuesta/properties/${propertyId}`, opciones),
 
   /**
    * Aplicar unos cortes concretos.
@@ -395,4 +492,9 @@ export function costeEnPalabras(
   const veces = Math.round(costeUsd / costeAnalisisUsd);
   if (veces < 2) return cifra;
   return `${cifra} · unas ${veces} veces lo que cuesta analizarla`;
+}
+
+/** «1,50:1» a partir del número. Es lo que hace discutible un «muy apaisada». */
+export function aspectoEnPalabras(aspecto: number): string {
+  return `${aspecto.toFixed(2).replace('.', ',')}:1`;
 }
