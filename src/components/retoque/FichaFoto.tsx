@@ -82,6 +82,31 @@ export function FichaFoto({
   const [viendoRecorte, setViendoRecorte] = useState(false);
   const [historial, setHistorial] = useState<Retoque[] | null>(null);
 
+  /*
+    Mientras haya un retoque pagado y sin imagen, se vuelve a preguntar.
+
+    `GET images/:id/retouches` es una lectura y no cuesta nada. Solo corre en
+    ese estado, que hoy no se da —el POST es síncrono— pero se dará en cuanto el
+    módulo pase a asíncrono, porque una edición tarda minuto y medio y eso no
+    cabe en el tiempo de espera de nginx. Sin esto, el asesor se quedaría
+    mirando un aviso que no cambia nunca y acabaría pulsando otra vez, y la
+    segunda pulsación se paga igual que la primera.
+  */
+  const generando =
+    historial?.some(
+      (r) => r.status === 'PENDIENTE' && !r.retouchedSnapshot && !r.error,
+    ) ?? false;
+  useEffect(() => {
+    if (!generando) return;
+    const id = setInterval(() => {
+      void apiRetoque
+        .retoquesDe(image.id)
+        .then((filas) => filas && setHistorial(filas))
+        .catch(() => {});
+    }, 3000);
+    return () => clearInterval(id);
+  }, [generando, image.id]);
+
   useEffect(() => {
     if (!retoqueHabilitado) return;
     let vivo = true;
@@ -505,11 +530,25 @@ function BloqueRetoque({
     );
   }
 
+  /*
+    Pendiente y sin imagen: o el proveedor falló, o todavía está generando.
+
+    Los dos casos comparten fila y se separan por `error`. Hoy el POST es
+    síncrono y este estado no llega nunca, pero el módulo va a pasarse a
+    asíncrono porque una edición tarda 90-100 segundos medidos y eso se muere
+    en el `proxy_read_timeout` de nginx, que por defecto son 60. Escrito así, el
+    día que cambie la pantalla ya lo aguanta.
+  */
   if (pendiente && !pendiente.retouchedSnapshot) {
-    return (
+    return pendiente.error ? (
       <Alert tone="error">
-        El último intento falló{pendiente.error ? `: ${pendiente.error}` : '.'} Se pagó igual
-        ({dolares(pendiente.costUsd)}).
+        El último intento falló: {pendiente.error} Se pagó igual (
+        {dolares(pendiente.costUsd)}).
+      </Alert>
+    ) : (
+      <Alert tone="warn">
+        La IA está generando la foto. Ya está pagada: no hace falta volver a pulsar.
+        Tarda un minuto y medio largo.
       </Alert>
     );
   }
