@@ -477,13 +477,12 @@ function BloqueRetoque({
     es un reproche.
   */
   useEffect(() => {
-    if (texto.length < 3) {
-      setPrevio(null);
-      return;
-    }
     let vigente = true;
+    /* Sin texto también, y esa es la llamada que más importa: es la que
+       contesta «¿qué le va a hacer si no escribo nada?», que es lo que hace
+       todo el mundo. */
     apiRetoque
-      .previoRetoque(texto)
+      .previoRetoque(texto.length >= 3 ? texto : undefined)
       .then((res) => {
         // La respuesta de una frase que ya no esta escrita se tira: si no, el
         // aviso puede acabar hablando de un texto anterior.
@@ -602,13 +601,29 @@ function BloqueRetoque({
     <section className="flex flex-col gap-3 rounded-md border p-3">
       <div className="min-w-0">
         <h4 className="flex items-center gap-1.5 text-sm font-medium">
-          <Wand2 className="size-4 text-muted-foreground" aria-hidden /> Retocar con IA
+          <Wand2 className="size-4 text-muted-foreground" aria-hidden /> Mejorar con IA
         </h4>
         <p className="text-xs text-muted-foreground">
-          Genera una foto nueva a partir de esta. Es lo caro de la pantalla y lo único que
-          puede cambiar lo que hay en la casa: se pide foto a foto, nunca en lote.
+          Siempre hace lo mismo de base —exposición, sombras, luces, balance de blancos,
+          color, contraste, nitidez, definición y ruido— así que no hace falta escribir
+          nada. Es lo caro de la pantalla y lo único que puede cambiar lo que hay en la
+          casa: se pide foto a foto, nunca en lote.
         </p>
       </div>
+
+      {/* El texto exacto, no una descripción de él.
+          Plegado porque son ocho líneas que casi nadie necesita leer, y
+          presente porque quien pregunta «¿qué le va a hacer a mi foto?»
+          merece la respuesta literal y no un resumen que puede quedarse
+          viejo el día que alguien afine el prompt en la API. */}
+      {previo && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer select-none">
+            Ver lo que se le pide siempre
+          </summary>
+          <p className="mt-1 whitespace-pre-wrap">{previo.mejoraPorDefecto}</p>
+        </details>
+      )}
 
       {aplicado && (
         <div className="flex flex-col gap-2 rounded-md border border-amber-200 bg-amber-50/60 p-3">
@@ -639,12 +654,14 @@ function BloqueRetoque({
       )}
 
       <label className="flex flex-col gap-1 text-sm">
-        <span className="micro-label text-muted-foreground">Qué quieres que haga</span>
+        <span className="micro-label text-muted-foreground">
+          Algo más para esta foto (opcional)
+        </span>
         <Textarea
           rows={2}
           value={instruccion}
           maxLength={1000}
-          placeholder="La alcoba salió muy oscura, sube la luz"
+          placeholder="Opcional. Ej.: esta alcoba salió muy oscura"
           onChange={(e) => setInstruccion(e.target.value)}
         />
       </label>
@@ -691,15 +708,17 @@ function BloqueRetoque({
         <p className="text-xs text-muted-foreground">
           {previo
             ? costeEnPalabras(estado, previo.costeOrientativoUsd)
-            : 'Escribe qué quieres y te digo qué haría y cuánto cuesta, antes de gastar nada.'}
+            : 'Calculando qué haría y cuánto cuesta, antes de gastar nada.'}
           {gastado > 0 && ` · ya se ha gastado ${dolares(gastado)} en esta foto`}
         </p>
         <Button
           size="sm"
+          /* Sin la condición de longitud: no escribir nada es la petición
+             normal, no una petición incompleta. Lo único que sigue frenando
+             es lo que frenaba de verdad —la confirmación de una alteración—
+             y no saber todavía qué se va a mandar. */
           disabled={
-            ocupado ||
-            texto.length < 3 ||
-            (previo?.requiereConfirmacion === true && !asumida)
+            ocupado || !previo || (previo.requiereConfirmacion === true && !asumida)
           }
           onClick={() => onPedir(texto, asumida)}
         >
@@ -707,8 +726,8 @@ function BloqueRetoque({
           {/* La cifra en el propio botón, no solo encima: es la última cosa
               que se lee antes de gastar. Si no se sabe, no se inventa. */}
           {(previo?.costeOrientativoUsd ?? precioRetoque(estado)) !== null
-            ? `Retocar por ${dolares((previo?.costeOrientativoUsd ?? precioRetoque(estado))!)}`
-            : 'Retocar esta foto'}
+            ? `Mejorar por ${dolares((previo?.costeOrientativoUsd ?? precioRetoque(estado))!)}`
+            : 'Mejorar esta foto'}
         </Button>
       </div>
 

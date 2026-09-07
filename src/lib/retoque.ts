@@ -340,6 +340,18 @@ export interface Retoque {
  * se escribe y no después de cobrar, que es cuando ya da igual.
  */
 export interface PrevioRetoque {
+  /**
+   * El texto ENTERO que se le va a mandar al modelo: la mejora de siempre más
+   * lo que se haya escrito.
+   *
+   * Lo compone el servidor y lo devuelve ya compuesto a propósito. El panel no
+   * pega dos cadenas: si lo hiciera habría dos versiones del mismo texto —una
+   * aquí y otra en la API— y afinar la de allí dejaría a esta pantalla
+   * enseñando la vieja sin que nada fallara.
+   */
+  instruccion: string;
+  /** Solo la base, para poder separar en pantalla lo de siempre de lo de hoy. */
+  mejoraPorDefecto: string;
   kind: RetouchKind;
   kindLabel: string;
   motivos: string[];
@@ -487,8 +499,19 @@ export const retoque = {
   deshacerRecorte: (imageId: string) =>
     api.post<MediaImage>(`${BASE}/images/${imageId}/crop`, { cortes: [] }),
 
-  previoRetoque: (instruction: string) =>
-    api.post<PrevioRetoque>(`${BASE}/retouch/preview`, { instruction }),
+  /*
+    Sin texto también: es la llamada que se hace nada más abrir la foto.
+
+    La mejora por defecto se aplica siempre, así que «¿qué va a pasar si no
+    escribo nada?» tiene respuesta —y coste— antes de tocar el botón. Antes
+    esto exigía tres caracteres y por eso el caso más frecuente era el único
+    que se lanzaba sin ver nada.
+  */
+  previoRetoque: (instruction?: string) =>
+    api.post<PrevioRetoque>(
+      `${BASE}/retouch/preview`,
+      instruction ? { instruction } : {},
+    ),
 
   /** Todos los intentos de una foto, incluidos los descartados y los fallidos. */
   retoquesDe: (imageId: string, signal?: AbortSignal) =>
@@ -497,7 +520,13 @@ export const retoque = {
   /** Aquí se gasta. El coste va delante del botón que llama a esto. */
   retocar: (imageId: string, instruction: string, alteracionAsumida: boolean) =>
     api.post<Retoque>(`${BASE}/images/${imageId}/retouch`, {
-      instruction,
+      /*
+        Lo que viaja es EL COMENTARIO, no la petición entera: la mejora de
+        siempre la pone el servidor. Vacío es un caso legítimo y frecuente
+        —«mejórala y ya»— y por eso el campo se omite en vez de mandarse en
+        blanco, que es lo que el DTO acepta como «sin comentario».
+      */
+      ...(instruction ? { instruction } : {}),
       alteracionAsumida,
     }),
 
