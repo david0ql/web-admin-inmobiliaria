@@ -110,6 +110,15 @@ export interface ResultadoAnalisis {
 export interface EstadoImagenesIA {
   /** Sin clave del proveedor esto es `false` y no hay que ofrecer el botón. */
   enabled: boolean;
+  /**
+   * Cuántas fotos entran en una llamada.
+   *
+   * Viene del servidor y no de una constante de aquí porque es configurable
+   * (`IMAGE_AI_MAX_IMAGES`, de 1 a 40): el día que se baje para contener el
+   * gasto, un número copiado en el panel prometería más de lo que se manda, y
+   * eso no da error — se descubre en la factura.
+   */
+  maxImages: number;
   promptVersion: number;
   rooms: { value: RoomKind; label: string }[];
   gateCodes: string[];

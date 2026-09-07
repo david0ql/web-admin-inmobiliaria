@@ -15,13 +15,6 @@ import {
 import { cn } from '@/lib/utils';
 
 /**
- * Cuántas fotos entran en una llamada. Lo impone el servidor, y el panel tiene
- * que saberlo: sin esto el botón de un inmueble con 30 fotos prometería 30 y
- * mandaría 20, que es la peor forma de enseñar un precio.
- */
-const LOTE_MAX = 20;
-
-/**
  * Lo que la IA opina de las fotos de un inmueble.
  *
  * Tres cosas que no son negociables y explican casi todo el diseño:
@@ -156,11 +149,15 @@ export function RevisionImagenes({
   if (estado.error || revision.error || !revision.data) return null;
 
   const total = images.length;
+  /* El tope del lote lo dice el servidor: es configurable, y copiarlo aquí
+     haría que el botón prometiera más de lo que se manda en cuanto alguien lo
+     baje para contener el gasto. */
+  const lote = estado.data?.maxImages ?? 0;
   /* Lo que va a ir DE VERDAD en esta llamada: el servidor corta el lote en 20,
      así que prometer más sería mentir sobre lo que se paga y sobre lo que se
      va a ver al volver. */
   const pedidas = confirmando === 'todas' ? total : nuevas.length;
-  const aAnalizar = Math.min(pedidas, LOTE_MAX);
+  const aAnalizar = Math.min(pedidas, lote);
   const quedan = pedidas - aAnalizar;
 
   return (
@@ -180,8 +177,8 @@ export function RevisionImagenes({
             onClick={() => setConfirmando(nuevas.length > 0 ? 'nuevas' : 'todas')}
           >
             {nuevas.length > 0
-              ? `Analizar ${Math.min(nuevas.length, LOTE_MAX)} ${nuevas.length === 1 ? 'foto' : 'fotos'}`
-              : `Volver a analizar · ${Math.min(total, LOTE_MAX)} ${total === 1 ? 'foto' : 'fotos'}`}
+              ? `Analizar ${Math.min(nuevas.length, lote)} ${nuevas.length === 1 ? 'foto' : 'fotos'}`
+              : `Volver a analizar · ${Math.min(total, lote)} ${total === 1 ? 'foto' : 'fotos'}`}
           </Button>
         )
       }
@@ -209,8 +206,7 @@ export function RevisionImagenes({
             <strong className="font-medium text-foreground">
               Son {total} {total === 1 ? 'imagen' : 'imágenes'} y cada una se cobra.
             </strong>
-            {total > LOTE_MAX &&
-              ` Van de ${LOTE_MAX} en ${LOTE_MAX}, así que harán falta varias tandas.`}
+            {total > lote && ` Van de ${lote} en ${lote}, así que harán falta varias tandas.`}
           </p>
         )}
 
@@ -383,7 +379,7 @@ export function RevisionImagenes({
             </p>
             {quedan > 0 && (
               <p className="text-muted-foreground">
-                El servidor analiza {LOTE_MAX} por tanda, así que{' '}
+                El servidor analiza {lote} por tanda, así que{' '}
                 {quedan === 1 ? 'queda 1 foto' : `quedan ${quedan} fotos`} para la
                 siguiente. Vuelve a pulsar cuando acabe ésta.
               </p>
