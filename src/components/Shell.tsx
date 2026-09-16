@@ -85,6 +85,7 @@ const MAIN: NavEntry[] = [
       // Lo que entra por el sitio publico es inventario por nacer, no una
       // gestion aparte: se mira desde donde se mira el inventario.
       { to: '/solicitudes', label: 'Consignaciones' },
+      { to: '/cambios-inmuebles', label: 'Cambios de propietarios' },
     ],
   },
   {

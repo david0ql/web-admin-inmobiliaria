@@ -11,6 +11,7 @@ import { Properties } from './pages/Properties';
 import { Projects } from './pages/Projects';
 import { ProjectDetail } from './pages/ProjectDetail';
 import { Consignments } from './pages/Consignments';
+import { PropertyChanges } from './pages/PropertyChanges';
 import { CreditRequests } from './pages/CreditRequests';
 import { PropertyDetail } from './pages/PropertyDetail';
 import { PropertyForm } from './pages/PropertyForm';
@@ -95,6 +96,7 @@ export default function App() {
               <Route path="proyectos" element={<Projects />} />
               <Route path="proyectos/:id" element={<ProjectDetail />} />
               <Route path="solicitudes" element={<Consignments />} />
+              <Route path="cambios-inmuebles" element={<PropertyChanges />} />
               <Route path="creditos" element={<CreditRequests />} />
               <Route path="clientes" element={<Clients />} />
               <Route path="clientes/:id" element={<ClientDetail />} />

@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { useEffect, useMemo, useState, type FormEvent } from 'react';
+import { WandSparkles } from 'lucide-react';
 import { useNavigate, useParams } from 'react-router-dom';
 import {
   ApiError,
@@ -189,13 +190,36 @@ export function PropertyForm() {
     }));
   }
 
+  const standardTitle = useMemo(() => {
+    const type = catalogs.data?.propertyTypes.find(
+      (item) => String(item.id) === form.propertyTypeId,
+    )?.name;
+    const city = catalogs.data?.cities.find(
+      (item) => String(item.id) === form.cityId,
+    )?.name;
+    const zone = zones.data?.find((item) => String(item.id) === form.zoneId)?.name;
+    if (!type || !city) return form.title;
+
+    const business = form.forSale && form.forRent
+      ? 'en venta y arriendo'
+      : form.forRent
+        ? 'en arriendo'
+        : 'en venta';
+    const place = zone ? `${zone}, ${city}` : city;
+    const specs = [
+      form.bedrooms ? `${form.bedrooms} alcobas` : '',
+      (form.builtArea || form.area) ? `${form.builtArea || form.area} m²` : '',
+    ].filter(Boolean);
+    return `${type} ${business} en ${place}${specs.length ? ` · ${specs.join(' · ')}` : ''}`;
+  }, [catalogs.data, form, zones.data]);
+
   async function submit(event: FormEvent) {
     event.preventDefault();
     setBusy(true);
     setError(null);
 
     const payload = {
-      title: form.title.trim(),
+      title: standardTitle.trim(),
       address: textOrUndefined(form.address),
       propertyTypeId: Number(form.propertyTypeId),
       cityId: Number(form.cityId),
@@ -297,13 +321,26 @@ export function PropertyForm() {
 
         <Card title="Identificación">
           <div className="flex flex-col gap-4">
+            <div className="rounded-xl border bg-secondary/40 p-4">
+              <div className="mb-2 flex items-center justify-between gap-3">
+                <span className="micro-label text-muted-foreground">Nombre público estandarizado</span>
+                <Badge tone="neutral"><WandSparkles className="size-3" /> Automático</Badge>
+              </div>
+              <p className="text-base font-semibold text-foreground">
+                {standardTitle || 'Elige tipo y ciudad para construir el nombre'}
+              </p>
+              <p className="mt-1 text-xs text-muted-foreground">
+                Se construye con tipo, negocio, zona, ciudad, alcobas y área. La web pública usa siempre este estándar.
+              </p>
+            </div>
             <Field
-              label="Título"
+              label="Título guardado"
               required
               minLength={5}
-              value={form.title}
-              onChange={(e) => set('title', e.target.value)}
-              placeholder="APARTAMENTO EN VENTA EN CAÑAVERAL FLORIDABLANCA"
+              value={standardTitle}
+              readOnly
+              hint="Se actualiza automáticamente al cambiar los datos del inmueble."
+              placeholder="Selecciona el tipo y la ciudad"
             />
             <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(180px,1fr))]">
               <SelectField
