@@ -48,6 +48,7 @@ import { Gallery } from '../components/media/Gallery';
 import { RevisionImagenes } from '../components/imagenes-ia/RevisionImagenes';
 import { RetoqueFotos } from '../components/retoque/RetoqueFotos';
 import { UnitTypeSelect } from './UnitTypes';
+import { PortalSyncCard } from '../components/portals/PortalSyncCard';
 
 interface Detail {
   property: Property;
@@ -290,8 +291,12 @@ export function PropertyDetail() {
               </dl>
             </Card>
 
-            <Card
-              title={`Portales · ${publications.length}`}
+            {/* Se vuelve a montar al guardar la lista de portales, para que
+                cargue el estado nuevo. */}
+            <PortalSyncCard
+              key={`${id}:${publications.map((p) => p.portalId).join(',')}`}
+              propertyId={property.id}
+              editable={editable}
               action={
                 editable && (
                   <Button variant="outline" size="sm" onClick={() => setPublishing(true)}>
@@ -299,45 +304,7 @@ export function PropertyDetail() {
                   </Button>
                 )
               }
-              flush
-            >
-              {publications.length === 0 ? (
-                <div className="p-5">
-                  <Empty title="Sin publicar">
-                    Este inmueble no está en ningún portal, así que no lo está viendo nadie.
-                  </Empty>
-                </div>
-              ) : (
-                <Table>
-                    <TBody>
-                      {publications.map((publication) => (
-                        <Tr key={publication.id}>
-                          <Td>{publication.portal.name}</Td>
-                          <Td className="w-[110px]">
-                            <Badge
-                              tone={
-                                publication.state === 'PUBLISHED'
-                                  ? 'green'
-                                  : publication.state === 'REJECTED'
-                                    ? 'red'
-                                    : 'neutral'
-                              }
-                            >
-                              {publication.state === 'PUBLISHED'
-                                ? 'Publicado'
-                                : publication.state === 'PENDING'
-                                  ? 'Pendiente'
-                                  : publication.state === 'REJECTED'
-                                    ? 'Rechazado'
-                                    : 'Pausado'}
-                            </Badge>
-                          </Td>
-                        </Tr>
-                      ))}
-                    </TBody>
-                </Table>
-              )}
-            </Card>
+            />
 
             {property.family && (
               <Card

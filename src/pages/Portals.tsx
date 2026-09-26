@@ -1,9 +1,15 @@
+import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { api, type CoverageRow } from '../lib/api';
 import { useFetch } from '../lib/useFetch';
+import { useAuth } from '../lib/auth';
+import { NEEDS_LOCATIONS, type PortalConnection } from '../lib/portals';
+import { ConnectionModal } from '../components/portals/ConnectionModal';
+import { LocationsModal } from '../components/portals/LocationsModal';
 import { PageHeader } from '../components/Shell';
 import {
   Badge,
+  Button,
   Card,
   Empty,
   ErrorNote,
@@ -31,6 +37,7 @@ interface PortalsData {
 }
 
 export function Portals() {
+  const { can } = useAuth();
   const { data, error, loading, reload } = useFetch<PortalsData>(async (signal) => {
     const [coverage, gaps] = await Promise.all([
       api.get<CoverageRow[]>('/publishing/coverage', undefined, signal),
@@ -47,6 +54,7 @@ export function Portals() {
       <PageHeader eyebrow="Difusión" title="Portales" />
 
       <PageBody>
+        {can('ADMIN') && <Connections />}
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}
         {loading && <Loading rows={5} />}
 
@@ -148,5 +156,103 @@ export function Portals() {
         )}
       </PageBody>
     </>
+  );
+}
+
+/**
+ * Las integraciones propias con cada portal. Solo administracion: aqui viven
+ * las credenciales.
+ */
+function Connections() {
+  const { data, error, loading, reload } = useFetch<PortalConnection[]>(
+    (signal) => api.get<PortalConnection[]>('/publishing/connections', undefined, signal),
+    [],
+  );
+  const [editing, setEditing] = useState<PortalConnection | null>(null);
+  const [mapping, setMapping] = useState<PortalConnection | null>(null);
+
+  return (
+    <Card
+      title="Conexiones"
+      action={<span className="note">Credenciales propias con cada portal</span>}
+      flush
+    >
+      {error && (
+        <div className="p-5">
+          <ErrorNote onRetry={reload}>{error}</ErrorNote>
+        </div>
+      )}
+      {loading && !data && (
+        <div className="p-5">
+          <Loading rows={4} />
+        </div>
+      )}
+      {data && (
+        <Table>
+          <THead>
+            <tr>
+              <Th>Portal</Th>
+              <Th>Estado</Th>
+              <Th>Ultima prueba</Th>
+              <Th className="w-[1%]" />
+            </tr>
+          </THead>
+          <TBody>
+            {data.map((conn) => {
+              const missing = conn.credentials.some((f) => f.required && !f.filled);
+              return (
+                <Tr key={conn.portalId}>
+                  <Td>
+                    <span className="flex flex-wrap items-center gap-1.5">
+                      <strong className="font-medium">{conn.portal.name}</strong>
+                      {conn.mode === 'feed' && <Badge tone="blue">Feed XML</Badge>}
+                      {conn.sandbox && <Badge tone="amber">Pruebas</Badge>}
+                    </span>
+                  </Td>
+                  <Td>
+                    {conn.enabled ? (
+                      <Badge tone="green">Conectado</Badge>
+                    ) : missing ? (
+                      <Badge tone="red">Faltan credenciales</Badge>
+                    ) : (
+                      <Badge>Apagado</Badge>
+                    )}
+                  </Td>
+                  <Td className="text-sm text-muted-foreground">
+                    {conn.lastCheckAt ? (
+                      <span className={conn.lastCheckOk ? '' : 'text-red-700'}>
+                        {conn.lastCheckOk ? 'Correcta' : 'Fallida'}
+                      </span>
+                    ) : (
+                      '—'
+                    )}
+                  </Td>
+                  <Td className="whitespace-nowrap text-right">
+                    <div className="flex justify-end gap-1.5">
+                      {NEEDS_LOCATIONS.has(conn.connector) && (
+                        <Button size="sm" variant="outline" onClick={() => setMapping(conn)}>
+                          Barrios
+                        </Button>
+                      )}
+                      <Button size="sm" variant="outline" onClick={() => setEditing(conn)}>
+                        Configurar
+                      </Button>
+                    </div>
+                  </Td>
+                </Tr>
+              );
+            })}
+          </TBody>
+        </Table>
+      )}
+      {editing && (
+        <ConnectionModal
+          connection={editing}
+          onClose={() => setEditing(null)}
+          onSaved={() => reload()}
+        />
+      )}
+      {mapping && <LocationsModal connection={mapping} onClose={() => setMapping(null)} />}
+    </Card>
   );
 }
