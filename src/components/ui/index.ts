@@ -7,7 +7,7 @@
 export { Button, buttonVariants } from './button'
 export { Input } from './input'
 export { Textarea } from './textarea'
-export { Field, SelectField, TextareaField, CheckField, SELECT_CLASS } from './field'
+export { Field, PasswordField, SelectField, TextareaField, CheckField, SELECT_CLASS } from './field'
 export { Card } from './card'
 export { BadgeBase, CardShell, CardContent, CardHeader, CardTitle, Skeleton } from './misc'
 export { Badge, TagBadge } from './badge'

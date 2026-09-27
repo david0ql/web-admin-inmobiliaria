@@ -1,9 +1,11 @@
 import { useState, type ReactNode } from 'react';
-import { NavLink, Outlet, useLocation, useOutletContext } from 'react-router-dom';
+import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   BarChart3,
   Building2,
   ChevronRight,
+  Blocks,
+  Landmark,
   CircleUser,
   Globe,
   Home,
@@ -16,11 +18,12 @@ import {
   Users,
   X,
 } from 'lucide-react';
+import { attendance, hour, type TodayStatus } from '../lib/attendance';
 import { useAuth } from '../lib/auth';
 import { useBranch } from '../lib/branch';
 import type { Role } from '../lib/api';
 import { ROLE_LABEL } from '../lib/format';
-import { Avatar, Button, Sheet, SheetContent, SheetTitle } from './ui';
+import { Avatar, Button, Modal, Sheet, SheetContent, SheetTitle } from './ui';
 import { cn } from '../lib/utils';
 
 /**
@@ -81,7 +84,6 @@ const MAIN: NavEntry[] = [
     icon: <Building2 />,
     children: [
       { to: '/inmuebles', label: 'Todos los inmuebles' },
-      { to: '/proyectos', label: 'Proyectos' },
       // Lo que entra por el sitio publico es inventario por nacer, no una
       // gestion aparte: se mira desde donde se mira el inventario.
       { to: '/solicitudes', label: 'Consignaciones' },
@@ -96,9 +98,20 @@ const MAIN: NavEntry[] = [
       { to: '/clientes', label: 'Todos los clientes' },
       { to: '/embudo', label: 'Embudo' },
       { to: '/conversaciones', label: 'Conversaciones' },
-      { to: '/creditos', label: 'Solicitudes de crédito' },
     ],
   },
+  /*
+    Proyectos y Creditos, al primer nivel.
+
+    Estaban colgados de Inmuebles y de Clientes, que es donde encajan por
+    parentesco, y ahi los dos se usaban a diario a dos clics: abrir el grupo y
+    despues el enlace. Un proyecto no es una vista mas del inventario —tiene sus
+    tipologias, sus unidades y sus zonas comunes—, y una solicitud de credito no
+    es una ficha de cliente. Los dos son trabajo propio, y el trabajo propio no
+    vive dentro del cajon de otro.
+  */
+  { to: '/proyectos', label: 'Proyectos', icon: <Blocks /> },
+  { to: '/creditos', label: 'Créditos', icon: <Landmark /> },
   // Un solo informe no es un desplegable: seria abrir un cajon para sacar una
   // cosa. Se queda de enlace suelto con el nombre que usa WASI.
   { to: '/informes', label: 'Reportes', icon: <BarChart3 /> },
@@ -359,7 +372,7 @@ function RailNav({
   groups: ReturnType<typeof useRailGroups>;
   pathname: string;
 }) {
-  const { user, signOut } = useAuth();
+  const { user } = useAuth();
   const allowed = (item: NavItem) =>
     !item.roles || (user ? item.roles.includes(user.role) : false);
 
@@ -405,12 +418,18 @@ function RailNav({
       <NavLink
         to="/"
         onClick={onNavigate}
-        className="flex flex-col gap-0.5 px-4 py-4 [&.active]:bg-transparent"
+        className="flex items-center px-4 py-4 [&.active]:bg-transparent"
       >
-        <strong className="text-base leading-none font-semibold tracking-tight text-white">
-          Serrano
-        </strong>
-        <span className="note text-white/50">Inmobiliaria</span>
+        {/* El logotipo sobre el rail oscuro. `brightness-0 invert` lo deja en
+            blanco puro: el original es tinta oscura y sobre el negro del rail
+            no se distinguia del fondo. */}
+        <img
+          src="/logo.png"
+          width={550}
+          height={210}
+          alt="Serrano Inmobiliaria"
+          className="h-7 w-auto brightness-0 invert"
+        />
       </NavLink>
 
       <BranchPicker />
@@ -434,16 +453,89 @@ function RailNav({
             </span>
           </div>
         </div>
-        <Button
-          variant="ghost"
-          size="sm"
-          onClick={() => void signOut()}
-          className="w-full justify-start text-white/70 hover:bg-white/10 hover:text-white"
-        >
-          <LogOut />
-          Cerrar sesión
-        </Button>
+        <SignOutButton />
       </div>
+    </>
+  );
+}
+
+/**
+ * Cerrar sesion, recordando la jornada abierta.
+ *
+ * Quien se va a casa cierra el portatil y cierra sesion; fichar la salida se le
+ * olvida, y la jornada se queda abierta hasta que alguien la cuadra a mano al
+ * dia siguiente —o hasta que el consolidado del mes sale con una jornada de
+ * catorce horas—. El momento de acordarse es este, porque es el unico en el que
+ * la persona esta diciendo "me voy".
+ *
+ * No bloquea: se puede salir sin fichar. Hay quien cierra sesion a media mañana
+ * para cambiar de equipo, y convertir esto en un peaje enseñaria a esquivarlo.
+ * Y el estado lo dice la API, nunca el navegador: quien ficho la salida desde
+ * el movil no tiene que ver el aviso en el portatil.
+ */
+function SignOutButton() {
+  const { signOut } = useAuth();
+  const navigate = useNavigate();
+  const [abierta, setAbierta] = useState<TodayStatus | null>(null);
+  const [comprobando, setComprobando] = useState(false);
+
+  async function intentar() {
+    setComprobando(true);
+    try {
+      const hoy = await attendance.today();
+      if (hoy.working) {
+        setAbierta(hoy);
+        return;
+      }
+    } catch {
+      // Si no se puede comprobar, no se secuestra la salida.
+    } finally {
+      setComprobando(false);
+    }
+    void signOut();
+  }
+
+  return (
+    <>
+      <Button
+        variant="ghost"
+        size="sm"
+        loading={comprobando}
+        onClick={() => void intentar()}
+        className="w-full justify-start text-white/70 hover:bg-white/10 hover:text-white"
+      >
+        <LogOut />
+        Cerrar sesión
+      </Button>
+
+      {abierta && (
+        <Modal
+          title="Tienes la jornada abierta"
+          onClose={() => setAbierta(null)}
+          footer={
+            <>
+              <Button variant="outline" onClick={() => void signOut()}>
+                Salir sin fichar
+              </Button>
+              <Button
+                onClick={() => {
+                  setAbierta(null);
+                  navigate('/asistencia');
+                }}
+              >
+                Fichar la salida
+              </Button>
+            </>
+          }
+        >
+          <p className="text-sm">
+            Marcaste entrada
+            {abierta.openSince ? ` a las ${hour(abierta.openSince)}` : ''} y
+            todavía no has fichado la salida. Si sales así, la jornada se queda
+            abierta y habrá que cuadrarla a mano.
+          </p>
+        </Modal>
+      )}
     </>
   );
 }

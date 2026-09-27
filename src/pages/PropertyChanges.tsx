@@ -19,6 +19,14 @@ const LABEL: Record<string, string> = {
   maintenanceFee: 'Administración', area: 'Área', builtArea: 'Área construida',
   privateArea: 'Área privada', bedrooms: 'Alcobas', bathrooms: 'Baños',
   garages: 'Garajes', archived: 'Archivar',
+  publicationStatus: 'Estado de publicación',
+};
+
+const ACTION: Record<string, string> = {
+  UPDATE: 'Edición', DEACTIVATE: 'Inactivación', ARCHIVE: 'Archivo',
+};
+const STATUS: Record<string, string> = {
+  PENDING: 'Pendiente', APPROVED: 'Aprobada', APPLIED: 'Aplicada', REJECTED: 'Rechazada',
 };
 
 export function PropertyChanges() {
@@ -51,13 +59,13 @@ export function PropertyChanges() {
           <Field label="Espera configurable (minutos)" type="number" min={0} max={1440} value={minutes} onChange={(e) => setMinutes(e.target.value)} className="sm:w-64" />
           <Button onClick={() => void saveSettings()} loading={busy === 'settings'}>Guardar periodo</Button>
         </div>
-        <p className="mt-2 text-xs text-muted-foreground">La inactivación pedida por el propietario sigue siendo inmediata. Ediciones y archivos se aplican después de esta espera.</p>
+        <p className="mt-2 text-xs text-muted-foreground">Se aplica a todo lo que pide el propietario —ediciones, inactivaciones y archivos— una vez aprobado.</p>
       </Card>
       {requests.error && <ErrorNote>{requests.error}</ErrorNote>}
       {requests.loading ? <Loading /> : !requests.data?.length ? <Empty title="No hay solicitudes">Los cambios enviados desde Mi cuenta aparecerán aquí.</Empty> : (
         <div className="grid gap-4">
           {requests.data.map((request) => (
-            <Card key={request.id} title={<div className="flex flex-wrap items-center gap-2"><span>{String(request.beforeValues.title ?? 'Inmueble')}</span><Badge tone={request.status === 'PENDING' ? 'amber' : request.status === 'REJECTED' ? 'red' : 'green'}>{request.status}</Badge><Badge tone="neutral">{request.action}</Badge></div>}>
+            <Card key={request.id} title={<div className="flex flex-wrap items-center gap-2"><span>{String(request.beforeValues.title ?? 'Inmueble')}</span><Badge tone={request.status === 'PENDING' ? 'amber' : request.status === 'REJECTED' ? 'red' : 'green'}>{STATUS[request.status] ?? request.status}</Badge><Badge tone="neutral">{ACTION[request.action] ?? request.action}</Badge></div>}>
               <p className="mb-4 text-xs text-muted-foreground">{date(request.createdAt)} · Inmueble {String(request.beforeValues.code ?? request.propertyId)}</p>
               <div className="overflow-hidden rounded-lg border">
                 {Object.entries(request.afterValues).map(([key, after]) => (

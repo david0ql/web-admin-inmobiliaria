@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   ApiError,
   api,
@@ -22,7 +23,6 @@ import {
   Badge,
   Button,
   Card,
-  CheckField,
   ErrorNote,
   Field,
   Loading,
@@ -52,7 +52,23 @@ import { cn } from '../lib/utils';
 export function Team() {
   const { can, user } = useAuth();
   const { branches } = useBranch();
-  const [includeInactive, setIncludeInactive] = useState(true);
+  /*
+    Solo los activos.
+
+    Antes venia marcado "Ver inactivos" y la lista abria con todo el historico
+    de la agencia: quien busca a un asesor para darle un inmueble no quiere
+    distinguir entre catorce nombres cual sigue trabajando aqui. Nadie se borra
+    —la cartera, las visitas y la asistencia siguen colgando de su ficha—, solo
+    deja de listarse.
+
+    Queda una puerta para volver a verlos, sin ocupar sitio en la pantalla:
+    `/equipo?inactivos=1`. Es lo que hace falta para poder reactivar a alguien
+    que se inactivo por error; sin ella, esa ficha seria irrecuperable desde el
+    panel.
+  */
+  const [params, setParams] = useSearchParams();
+  const includeInactive = params.get('inactivos') === '1';
+  const [reactivando, setReactivando] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [editing, setEditing] = useState<Agent | null>(null);
   const [shiftsFor, setShiftsFor] = useState<Agent | null>(null);
@@ -62,6 +78,23 @@ export function Team() {
     [includeInactive],
   );
 
+  async function cambiarEstado(agent: Agent, activar: boolean) {
+    const aviso = activar
+      ? `¿Reactivar a ${agent.fullName}? Volverá a poder entrar al panel.`
+      : `¿Inactivar a ${agent.fullName}? No podrá entrar al panel y dejará de aparecer en la lista. No se borra nada de lo suyo.`;
+    if (!window.confirm(aviso)) return;
+    setReactivando(agent.id);
+    try {
+      // Apagar es un DELETE porque es lo que hace la API; encender es el PATCH
+      // que ya existe para cualquier otro campo de la ficha.
+      if (activar) await api.patch(`/agents/${agent.id}`, { status: 'ACTIVE' });
+      else await api.delete(`/agents/${agent.id}`);
+      reload();
+    } finally {
+      setReactivando(null);
+    }
+  }
+
   return (
     <>
       <PageHeader
@@ -69,11 +102,11 @@ export function Team() {
         title="Equipo"
         actions={
           <>
-            <CheckField
-              label="Ver inactivos"
-              checked={includeInactive}
-              onChange={(e) => setIncludeInactive(e.target.checked)}
-            />
+            {includeInactive && (
+              <Button variant="outline" onClick={() => setParams({})}>
+                Ver solo activos
+              </Button>
+            )}
             {/* Aparece para quien tenga a alguien por debajo en el escalafon:
                 la administracion, la direccion y quien manda en una sede. La
                 API le limita el perfil y, si es de una sede, tambien la sede. */}
@@ -176,6 +209,32 @@ export function Team() {
                           <Button variant="outline" size="sm" onClick={() => setShiftsFor(agent)}>
                             Turnos
                           </Button>
+                          {/*
+                            Inactivar, nunca borrar: la API responde a DELETE
+                            apagando la cuenta y dejando en pie su cartera, sus
+                            visitas y su asistencia. Y no sobre uno mismo, que
+                            seria echarse de la aplicacion en la que se esta.
+                          */}
+                          {can('ADMIN') &&
+                            agent.id !== user?.id &&
+                            (agent.status === 'ACTIVE' ? (
+                              <Button
+                                variant="outline"
+                                size="sm"
+                                loading={reactivando === agent.id}
+                                onClick={() => void cambiarEstado(agent, false)}
+                              >
+                                Inactivar
+                              </Button>
+                            ) : (
+                              <Button
+                                size="sm"
+                                loading={reactivando === agent.id}
+                                onClick={() => void cambiarEstado(agent, true)}
+                              >
+                                Reactivar
+                              </Button>
+                            ))}
                         </span>
                       </Td>
                     </Tr>

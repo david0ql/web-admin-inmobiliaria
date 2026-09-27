@@ -5,6 +5,9 @@ import type {
   TextareaHTMLAttributes,
 } from 'react'
 
+import { Eye, EyeOff } from 'lucide-react'
+import { useState } from 'react'
+
 import { Input } from './input'
 import { Textarea } from './textarea'
 import { cn } from '@/lib/utils'
@@ -53,6 +56,48 @@ export function Field({
   return (
     <Shell label={label} hint={hint} required={required} className={className}>
       <Input required={required} {...rest} />
+    </Shell>
+  )
+}
+
+/**
+ * Contraseña con el ojo para verla.
+ *
+ * Escribir una clave a ciegas en un teclado de movil, y que el unico aviso de
+ * que salio mal sea "Correo o contraseña incorrectos", es la forma mas comun de
+ * quedarse fuera de una aplicacion cuya clave uno recuerda perfectamente.
+ *
+ * El boton no envia el formulario (`type="button"`) y anuncia su estado: sin
+ * eso, un lector de pantalla lee dos veces el mismo "mostrar" sin decir si la
+ * clave esta a la vista.
+ */
+export function PasswordField({
+  label,
+  hint,
+  required,
+  className,
+  ...rest
+}: FieldShell & Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>) {
+  const [visible, setVisible] = useState(false)
+  return (
+    <Shell label={label} hint={hint} required={required} className={className}>
+      <div className="relative">
+        <Input
+          type={visible ? 'text' : 'password'}
+          required={required}
+          className="pr-10"
+          {...rest}
+        />
+        <button
+          type="button"
+          onClick={() => setVisible((value) => !value)}
+          aria-pressed={visible}
+          aria-label={visible ? 'Ocultar la contraseña' : 'Ver la contraseña'}
+          className="absolute inset-y-0 right-0 grid w-10 place-items-center text-muted-foreground transition-colors hover:text-foreground"
+        >
+          {visible ? <EyeOff className="size-4" /> : <Eye className="size-4" />}
+        </button>
+      </div>
     </Shell>
   )
 }

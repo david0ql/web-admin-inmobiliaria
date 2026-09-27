@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { ApiError } from '../lib/api';
-import { Alert, Button, Field, SectionHeading } from '../components/ui';
+import {Alert, Button, PasswordField, SectionHeading } from '../components/ui';
 import { AuthLayout } from '../components/AuthLayout';
 
 /**
@@ -59,18 +59,7 @@ export function ChangePassword() {
   }
 
   return (
-    <AuthLayout
-      eyebrow="Seguridad"
-      title={
-        <>
-          Elige tu
-          <br />
-          contraseña
-        </>
-      }
-      lede="La clave con la que entraste la comparte todo el equipo. Mientras siga siendo esa, tu cuenta no puede ver ni la cartera ni el inventario."
-      aside={<span className="note text-white/40">Mínimo 8 caracteres</span>}
-    >
+    <AuthLayout>
       <form className="flex flex-col gap-4" onSubmit={submit}>
         <div>
           <span className="note">{user?.email}</span>
@@ -89,27 +78,25 @@ export function ChangePassword() {
         )}
         {error && <Alert>{error}</Alert>}
 
-        <Field
+        <PasswordField
           label="Contraseña actual"
-          type="password"
           autoComplete="current-password"
           required
           autoFocus
           value={current}
           onChange={(e) => setCurrent(e.target.value)}
         />
-        <Field
+        <PasswordField
           label="Contraseña nueva"
-          type="password"
+          hint="Mínimo 8 caracteres"
           autoComplete="new-password"
           required
           minLength={8}
           value={next}
           onChange={(e) => setNext(e.target.value)}
         />
-        <Field
+        <PasswordField
           label="Repite la nueva"
-          type="password"
           autoComplete="new-password"
           required
           value={repeat}

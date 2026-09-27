@@ -2,8 +2,8 @@ import { useState, type FormEvent } from 'react';
 import { Navigate } from 'react-router-dom';
 import { useAuth } from '../lib/auth';
 import { ApiError } from '../lib/api';
-import { Alert, Button, Field, SectionHeading } from '../components/ui';
-import { AuthFigure, AuthLayout } from '../components/AuthLayout';
+import { Alert, Button, Field, PasswordField } from '../components/ui';
+import { AuthLayout } from '../components/AuthLayout';
 
 export function Login() {
   const { user, signIn, loading } = useAuth();
@@ -35,27 +35,8 @@ export function Login() {
   }
 
   return (
-    <AuthLayout
-      eyebrow="Bucaramanga · Santander"
-      title={
-        <>
-          Serrano
-          <br />
-          Inmobiliaria
-        </>
-      }
-      lede="El inventario, la cartera y la agenda del equipo en un solo sitio."
-      aside={
-        <div className="flex flex-wrap gap-8">
-          <AuthFigure value="642" label="Inmuebles" />
-          <AuthFigure value="7.529" label="Clientes" />
-          <AuthFigure value="11" label="Portales" />
-        </div>
-      }
-    >
+    <AuthLayout>
       <form className="flex flex-col gap-4" onSubmit={submit}>
-        <SectionHeading light="Acceso" strong="del equipo" as="h2" className="mb-1" />
-
         {error && <Alert>{error}</Alert>}
 
         <Field
@@ -68,9 +49,8 @@ export function Login() {
           onChange={(e) => setEmail(e.target.value)}
           placeholder="asesor@serrano-inmobiliaria.com"
         />
-        <Field
+        <PasswordField
           label="Contraseña"
-          type="password"
           autoComplete="current-password"
           required
           value={password}
