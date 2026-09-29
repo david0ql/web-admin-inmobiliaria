@@ -46,7 +46,13 @@ export function Calendar() {
   const [cursor, setCursor] = useState(() => new Date());
   const [agentId, setAgentId] = useState('');
   const [creating, setCreating] = useState(false);
+  /* El dia que se pulso en la rejilla; `null` si se abrio desde la cabecera. */
+  const [creatingOn, setCreatingOn] = useState<Date | null>(null);
   const [selected, setSelected] = useState<Appointment | null>(null);
+
+  // La misma regla que el boton de la cabecera: si no puedes agendar, la
+  // casilla no se comporta como si pudieras.
+  const puedeAgendar = can('ADMIN', 'MANAGER', 'AGENT');
 
   const monthStart = new Date(cursor.getFullYear(), cursor.getMonth(), 1);
   const monthEnd = new Date(cursor.getFullYear(), cursor.getMonth() + 1, 0);
@@ -189,9 +195,27 @@ export function Calendar() {
                     key={key}
                     data-out={outside || undefined}
                     data-today={key === today || undefined}
-                    className="group flex min-h-[106px] flex-col gap-1 bg-card p-1.5 data-out:bg-secondary/60"
+                    className="group relative flex min-h-[106px] flex-col gap-1 bg-card p-1.5 data-out:bg-secondary/60"
                   >
-                    <span className="tabular grid size-5 shrink-0 place-items-center self-start rounded-full text-xs text-muted-foreground group-data-today:bg-primary group-data-today:text-primary-foreground">
+                    {/*
+                      La casilla entera abre el alta con ese dia puesto.
+
+                      Va como un boton por DEBAJO de las citas —position absolute
+                      e inset-0, con las citas por encima— y no envolviendolas:
+                      dentro de un boton no pueden ir otros botones, y las citas
+                      ya son botones que abren su ficha. Asi pulsar una cita la
+                      abre y pulsar el hueco agenda, que es lo que cada zona
+                      parece que hace.
+                    */}
+                    {puedeAgendar && (
+                      <button
+                        type="button"
+                        onClick={() => setCreatingOn(day)}
+                        aria-label={`Agendar el ${key}`}
+                        className="absolute inset-0 cursor-pointer transition-colors hover:bg-primary/5"
+                      />
+                    )}
+                    <span className="tabular pointer-events-none relative grid size-5 shrink-0 place-items-center self-start rounded-full text-xs text-muted-foreground group-data-today:bg-primary group-data-today:text-primary-foreground">
                       {day.getDate()}
                     </span>
                     {appointments.slice(0, 4).map((appointment) => (
@@ -199,7 +223,7 @@ export function Calendar() {
                         key={appointment.id}
                         type="button"
                         className={cn(
-                          'block w-full truncate rounded-sm border-l-2 px-1.5 py-0.5 text-left text-xs leading-snug',
+                          'relative block w-full truncate rounded-sm border-l-2 px-1.5 py-0.5 text-left text-xs leading-snug',
                           appointment.status === 'DONE'
                             ? 'border-muted-foreground bg-secondary text-muted-foreground'
                             : appointment.status === 'NO_SHOW'
@@ -213,7 +237,7 @@ export function Calendar() {
                       </button>
                     ))}
                     {appointments.length > 4 && (
-                      <span className="note">+{appointments.length - 4}</span>
+                      <span className="note relative">+{appointments.length - 4}</span>
                     )}
                   </div>
                 );
@@ -251,12 +275,17 @@ export function Calendar() {
         )}
       </PageBody>
 
-      {creating && (
+      {(creating || creatingOn) && (
         <AppointmentModal
           defaultAgentId={agentId || user?.id || ''}
-          onClose={() => setCreating(false)}
+          dia={creatingOn}
+          onClose={() => {
+            setCreating(false);
+            setCreatingOn(null);
+          }}
           onDone={() => {
             setCreating(false);
+            setCreatingOn(null);
             reload();
           }}
         />
@@ -278,19 +307,37 @@ export function Calendar() {
 
 function AppointmentModal({
   defaultAgentId,
+  dia,
   onClose,
   onDone,
 }: {
   defaultAgentId: string;
+  /** El dia que se pulso en la rejilla, si se llego por ahi. */
+  dia?: Date | null;
   onClose: () => void;
   onDone: () => void;
 }) {
   const { can } = useAuth();
   const agents = useFetch<Agent[]>((signal) => api.get<Agent[]>('/agents', undefined, signal), []);
 
-  const start = new Date();
-  start.setMinutes(0, 0, 0);
-  start.setHours(start.getHours() + 1);
+  /*
+    La hora de partida.
+
+    Sin dia, la siguiente hora en punto: quien pulsa "Agendar cita" desde la
+    cabecera suele estar agendando para ahora mismo.
+
+    Con dia —porque se pulso una casilla del mes— se conserva ESE dia y se
+    propone media mañana. Antes, pulsar un 14 no hacia nada y habia que abrir el
+    modal por otro lado y volver a escribir la fecha que se acababa de señalar,
+    que es justo lo que se estaba señalando.
+  */
+  const start = dia ? new Date(dia) : new Date();
+  if (dia) {
+    start.setHours(9, 0, 0, 0);
+  } else {
+    start.setMinutes(0, 0, 0);
+    start.setHours(start.getHours() + 1);
+  }
   const end = new Date(start.getTime() + 60 * 60 * 1000);
 
   const [form, setForm] = useState({

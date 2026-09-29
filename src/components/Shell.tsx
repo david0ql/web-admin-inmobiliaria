@@ -2,8 +2,10 @@ import { useState, type ReactNode } from 'react';
 import { NavLink, Outlet, useLocation, useNavigate, useOutletContext } from 'react-router-dom';
 import {
   BarChart3,
+  Bot,
   Building2,
   ChevronRight,
+  MessagesSquare,
   Blocks,
   Landmark,
   CircleUser,
@@ -13,7 +15,6 @@ import {
   MapPinned,
   Menu,
   Settings,
-  Sheet as SheetIcon,
   UserCog,
   Users,
   X,
@@ -78,6 +79,17 @@ const MAIN: NavEntry[] = [
       { to: '/asistencia', label: 'Mi asistencia', end: true },
     ],
   },
+
+  /*
+    El orden del trabajo, tal y como lo pidio la agencia: proyectos, inmuebles,
+    creditos, clientes y reportes.
+
+    No es alfabetico ni es el de WASI: es el recorrido de una venta. Primero lo
+    que se esta vendiendo ahora —los proyectos de obra nueva, que es donde esta
+    el volumen—, despues el inventario de usado, el credito que hace posible la
+    compra, la cartera de personas y, al final, las cifras de todo lo anterior.
+  */
+  { to: '/proyectos', label: 'Proyectos', icon: <Blocks /> },
   {
     id: 'inmuebles',
     label: 'Inmuebles',
@@ -90,38 +102,31 @@ const MAIN: NavEntry[] = [
       { to: '/cambios-inmuebles', label: 'Cambios de propietarios' },
     ],
   },
+  { to: '/creditos', label: 'Créditos', icon: <Landmark /> },
   {
     id: 'clientes',
     label: 'Clientes',
     icon: <Users />,
     children: [
       { to: '/clientes', label: 'Todos los clientes' },
-      { to: '/embudo', label: 'Embudo' },
-      { to: '/conversaciones', label: 'Conversaciones' },
+      { to: '/embudo', label: 'Embudos' },
     ],
   },
-  /*
-    Proyectos y Creditos, al primer nivel.
-
-    Estaban colgados de Inmuebles y de Clientes, que es donde encajan por
-    parentesco, y ahi los dos se usaban a diario a dos clics: abrir el grupo y
-    despues el enlace. Un proyecto no es una vista mas del inventario —tiene sus
-    tipologias, sus unidades y sus zonas comunes—, y una solicitud de credito no
-    es una ficha de cliente. Los dos son trabajo propio, y el trabajo propio no
-    vive dentro del cajon de otro.
-  */
-  { to: '/proyectos', label: 'Proyectos', icon: <Blocks /> },
-  { to: '/creditos', label: 'Créditos', icon: <Landmark /> },
   // Un solo informe no es un desplegable: seria abrir un cajon para sacar una
   // cosa. Se queda de enlace suelto con el nombre que usa WASI.
   { to: '/informes', label: 'Reportes', icon: <BarChart3 /> },
+
   /*
-    Las hojas van pegadas a Reportes y no dentro: son lo mismo mirado al reves.
-    Reportes responde las preguntas que ya sabemos que se hacen; Hojas es para
-    las que no, y de ahi que sea una hoja de calculo en blanco encima de los
-    mismos datos. Enlace suelto por la misma razon que Reportes.
+    Conversaciones y Asistente, al primer nivel.
+
+    Conversaciones colgaba de Clientes y el Asistente de "Sitio web", y son la
+    misma cosa mirada por sus dos caras: lo que el asistente contesta en la web
+    es lo que despues aparece aqui como conversacion, y afinar una sin mirar la
+    otra es trabajar a ciegas. Enterrada cada una en un cajon distinto, nadie
+    hacia el viaje.
   */
-  { to: '/hojas', label: 'Hojas', icon: <SheetIcon /> },
+  { to: '/conversaciones', label: 'Conversaciones', icon: <MessagesSquare /> },
+  { to: '/asistente', label: 'Asistente', icon: <Bot /> },
 ];
 
 const MANAGE: NavEntry[] = [
@@ -146,9 +151,7 @@ const MANAGE: NavEntry[] = [
     label: 'Sitio web',
     icon: <Globe />,
     children: [
-      { to: '/portada', label: 'Portada' },
       { to: '/textos', label: 'Textos' },
-      { to: '/asistente', label: 'Asistente' },
       // Los portales son la otra cara publica del inventario: se decide junto
       // a lo que se publica, no junto a los ajustes internos.
       { to: '/portales', label: 'Portales' },
