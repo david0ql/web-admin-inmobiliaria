@@ -298,8 +298,8 @@ export type Role =
   | 'AGENT'
   | 'VIEWER';
 
-/** Los dos roles que abarcan la agencia entera y no cuelgan de una oficina. */
-export const ROLES_ACROSS_BRANCHES: Role[] = ['ADMIN', 'DIRECTOR'];
+/** El único rol que abarca la agencia entera y no cuelga de una oficina. */
+export const ROLES_ACROSS_BRANCHES: Role[] = ['ADMIN'];
 
 export function seesAllBranches(role: Role | undefined | null): boolean {
   return !!role && ROLES_ACROSS_BRANCHES.includes(role);
