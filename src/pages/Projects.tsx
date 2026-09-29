@@ -11,6 +11,7 @@ import {
 } from '../lib/api';
 import { useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import {
   Alert,
@@ -78,9 +79,12 @@ export function Projects() {
         eyebrow="Inventario"
         title="Proyectos"
         actions={
+          <>
+            <FiltroSede />
           can('ADMIN', 'MANAGER') && (
             <Button onClick={() => setCreating(true)}>Nuevo proyecto</Button>
           )
+          </>
         }
       />
 

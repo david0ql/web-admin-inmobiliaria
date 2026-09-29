@@ -939,6 +939,10 @@ export interface Pipeline {
   isDefault: boolean;
   position: number;
   stages: PipelineStage[];
+  /** De qué sede es. `null` significa de toda la empresa. */
+  branchId: string | null;
+  /** Qué perfiles lo ven. Vacío significa todos. */
+  visibleRoles: Role[];
 }
 
 export interface Kanban {

@@ -12,7 +12,7 @@ import {
 } from '../lib/api';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
-import { useBranch } from '../lib/branch';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import {
   Alert,
@@ -42,7 +42,6 @@ import {
 
 export function Calendar() {
   const { can, user } = useAuth();
-  const { branches, branchId, seesAll, setBranchId } = useBranch();
   const [cursor, setCursor] = useState(() => new Date());
   const [agentId, setAgentId] = useState('');
   const [creating, setCreating] = useState(false);
@@ -100,30 +99,10 @@ export function Calendar() {
         title={monthLabel.charAt(0).toUpperCase() + monthLabel.slice(1)}
         actions={
           <>
-            {/*
-              La sede, aqui mismo.
+            {/* "Toda la agenda" y no "todas las sedes": aqui lo que se mira
+                son citas, no oficinas. */}
+            <FiltroSede etiquetaTodas="Toda la agenda" />
 
-              Existe el selector del rail, pero es global y se lee como parte
-              del menu: quien abre la agenda para ver que tiene Cañaveral el
-              jueves buscaba el filtro junto al de asesor, no en la columna
-              negra. Es el MISMO estado —cambiar aqui cambia el rail y al
-              contrario—, no un segundo filtro que pueda contradecirlo.
-            */}
-            {seesAll && branches.length > 1 && (
-              <SelectField
-                label="Sede"
-                className="min-w-[170px]"
-                value={branchId ?? ''}
-                onChange={(e) => setBranchId(e.target.value || null)}
-              >
-                <option value="">Todas las sedes</option>
-                {branches.map((branch) => (
-                  <option key={branch.id} value={branch.id}>
-                    {branch.name}
-                  </option>
-                ))}
-              </SelectField>
-            )}
             {can('ADMIN', 'MANAGER', 'VIEWER') && (
               <SelectField
                 label="Asesor"

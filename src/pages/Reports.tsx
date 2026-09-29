@@ -6,6 +6,7 @@ import {
   type TypeInventory,
 } from '../lib/api';
 import { useFetch } from '../lib/useFetch';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import {
   Badge,
@@ -61,7 +62,7 @@ export function Reports() {
 
   return (
     <>
-      <PageHeader eyebrow="Análisis" title="Informes" />
+      <PageHeader eyebrow="Análisis" title="Informes" actions={<FiltroSede />} />
 
       <PageBody>
         {error && <ErrorNote onRetry={reload}>{error}</ErrorNote>}

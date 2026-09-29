@@ -22,6 +22,7 @@ import {
 import { ROLE_LABEL, relative } from '../lib/format';
 import { useAuth } from '../lib/auth';
 import { useFetch } from '../lib/useFetch';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import {
   Alert,
@@ -227,11 +228,14 @@ export function AttendanceHistory() {
         eyebrow="Organización"
         title="Asistencia"
         actions={
+          <>
+            <FiltroSede />
           <span className="note">
             {dias > 0
               ? `${dias} ${dias === 1 ? 'día' : 'días'} · hora de Colombia`
               : 'Rango sin días'}
           </span>
+          </>
         }
       />
 

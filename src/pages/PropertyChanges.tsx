@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Clock3, X } from 'lucide-react';
 import { api } from '../lib/api';
 import { useFetch } from '../lib/useFetch';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import { Badge, Button, Card, Empty, ErrorNote, Field, Loading, PageBody } from '../components/ui';
 import { date } from '../lib/format';
@@ -52,7 +53,7 @@ export function PropertyChanges() {
   };
 
   return <>
-    <PageHeader eyebrow="Portal de propietarios" title="Cambios de inmuebles" />
+    <PageHeader eyebrow="Portal de propietarios" title="Cambios de inmuebles" actions={<FiltroSede />} />
     <PageBody>
       <Card title="Propagación después de aprobar" className="mb-6">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-end">

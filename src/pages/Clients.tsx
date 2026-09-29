@@ -12,6 +12,7 @@ import {
 } from '../lib/api';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import {
   Alert,
@@ -124,9 +125,12 @@ export function Clients() {
         eyebrow="Cartera"
         title="Clientes"
         actions={
+          <>
+            <FiltroSede />
           can('ADMIN', 'MANAGER', 'AGENT') && (
             <Button onClick={() => setCreating(true)}>Nuevo cliente</Button>
           )
+          </>
         }
       />
 

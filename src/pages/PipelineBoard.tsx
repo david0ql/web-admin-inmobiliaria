@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Settings2, Trash2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import {
   ApiError,
@@ -9,9 +10,11 @@ import {
   type LeadSource,
   type Page,
   type Pipeline,
+  type Role,
 } from '../lib/api';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
+import { useBranch } from '../lib/branch';
 import { PageHeader } from '../components/Shell';
 import {
   Badge,
@@ -19,11 +22,15 @@ import {
   CheckField,
   ErrorNote,
   Field,
+  Alert,
+  CheckField as Casilla,
   Loading,
+  Modal,
   PageBody,
+  SectionHeading,
   SelectField,
 } from '../components/ui';
-import { number, relative } from '../lib/format';
+import { number, relative, ROLE_LABEL } from '../lib/format';
 
 interface BoardData {
   pipelines: Pipeline[];
@@ -65,6 +72,10 @@ export function PipelineBoard() {
 
   const debouncedQuery = useDebounced(filters.q);
   const editable = can('ADMIN', 'MANAGER', 'AGENT');
+  const { branches, branchId, seesAll, setBranchId } = useBranch();
+  // La misma regla que la API: quien manda sobre un equipo define sus embudos.
+  const puedeGestionar = can('ADMIN', 'DIRECTOR', 'COORDINATOR', 'MANAGER');
+  const [gestionando, setGestionando] = useState(false);
 
   const agents = useFetch<Agent[]>((signal) => api.get<Agent[]>('/agents', undefined, signal), []);
   const sources = useFetch<LeadSource[]>(
@@ -156,23 +167,70 @@ export function PipelineBoard() {
         eyebrow="Embudo comercial"
         title={data?.kanban.pipeline.name ?? 'Embudo'}
         actions={
-          <SelectField
-            label="Embudo"
-            className="min-w-[190px]"
-            value={pipelineId || (data?.kanban.pipeline.id ?? '')}
-            onChange={(e) => {
-              setPipelineId(e.target.value);
-              setLimits({});
-            }}
-          >
-            {(data?.pipelines ?? []).map((pipeline) => (
-              <option key={pipeline.id} value={pipeline.id}>
-                {pipeline.name}
-              </option>
-            ))}
-          </SelectField>
+          <>
+            {/*
+              La sede, aqui y no solo en el rail.
+
+              Los embudos son de una sede: sin poder cambiarla desde la propia
+              pantalla, la administracion tenia que ir al menu, cambiarla alli y
+              volver. Es el MISMO estado que el selector del rail, no un segundo
+              filtro que pueda contradecirlo.
+            */}
+            {seesAll && branches.length > 1 && (
+              <SelectField
+                label="Sede"
+                className="min-w-[170px]"
+                value={branchId ?? ''}
+                onChange={(e) => setBranchId(e.target.value || null)}
+              >
+                <option value="">Todas las sedes</option>
+                {branches.map((branch) => (
+                  <option key={branch.id} value={branch.id}>
+                    {branch.name}
+                  </option>
+                ))}
+              </SelectField>
+            )}
+
+            <SelectField
+              label="Embudo"
+              className="min-w-[190px]"
+              value={pipelineId || (data?.kanban.pipeline.id ?? '')}
+              onChange={(e) => {
+                setPipelineId(e.target.value);
+                setLimits({});
+              }}
+            >
+              {(data?.pipelines ?? []).map((pipeline) => (
+                <option key={pipeline.id} value={pipeline.id}>
+                  {pipeline.name}
+                  {pipeline.branchId === null ? ' · empresa' : ''}
+                </option>
+              ))}
+            </SelectField>
+
+            {/* Quien manda sobre un equipo define como trabaja ese equipo. */}
+            {puedeGestionar && (
+              <Button variant="outline" onClick={() => setGestionando(true)}>
+                <Settings2 />
+                Gestionar
+              </Button>
+            )}
+          </>
         }
       />
+
+      {gestionando && (
+        <GestionEmbudos
+          pipelines={data?.pipelines ?? []}
+          onClose={() => setGestionando(false)}
+          onDone={() => {
+            setGestionando(false);
+            setPipelineId('');
+            reload();
+          }}
+        />
+      )}
 
       <PageBody>
         <div className="grid grid-cols-2 gap-3 md:grid-cols-4 xl:grid-cols-6">
@@ -358,5 +416,175 @@ export function PipelineBoard() {
         )}
       </PageBody>
     </>
+  );
+}
+
+/** Los perfiles a los que se le puede enseñar un embudo. */
+const PERFILES: Role[] = ['DIRECTOR', 'COORDINATOR', 'AGENT', 'VIEWER'];
+
+/**
+ * Crear embudos y decidir quien los ve.
+ *
+ * Un embudo describe COMO trabaja un equipo —captacion no se parece a obra
+ * nueva—, asi que lo define quien dirige ese equipo y no la administracion
+ * central. Y decide a quien se lo enseña: quien no aparece en la lista no lo ve
+ * ni sabe que existe, que es la diferencia entre acotar y esconder.
+ *
+ * Sin perfiles marcados, lo ve todo el mundo. Es lo que se espera cuando nadie
+ * dice nada, y es como se comportan los embudos que ya existian.
+ */
+function GestionEmbudos({
+  pipelines,
+  onClose,
+  onDone,
+}: {
+  pipelines: Pipeline[];
+  onClose: () => void;
+  onDone: () => void;
+}) {
+  const { user, can } = useAuth();
+  const { branches, seesAll } = useBranch();
+  const [nombre, setNombre] = useState('');
+  const [sede, setSede] = useState<string>(seesAll ? '' : (user?.branchId ?? ''));
+  const [perfiles, setPerfiles] = useState<Role[]>([]);
+  const [error, setError] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+
+  const alternar = (rol: Role) =>
+    setPerfiles((actuales) =>
+      actuales.includes(rol)
+        ? actuales.filter((r) => r !== rol)
+        : [...actuales, rol],
+    );
+
+  async function crear() {
+    setBusy(true);
+    setError(null);
+    try {
+      await api.post('/pipelines', {
+        name: nombre.trim(),
+        // Cadena vacia = de empresa, y eso solo lo puede pedir quien ve todas.
+        branchId: sede === '' ? (seesAll ? null : undefined) : sede,
+        visibleRoles: perfiles,
+      });
+      onDone();
+    } catch (err) {
+      setError(err instanceof ApiError ? err.message : 'No se pudo crear el embudo.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function retirar(pipeline: Pipeline) {
+    if (!window.confirm(`¿Retirar el embudo "${pipeline.name}"?`)) return;
+    setBusy(true);
+    setError(null);
+    try {
+      await api.delete(`/pipelines/${pipeline.id}`);
+      onDone();
+    } catch (err) {
+      setError(
+        err instanceof ApiError ? err.message : 'No se pudo retirar el embudo.',
+      );
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <Modal title="Embudos" onClose={onClose} wide>
+      {error && <Alert>{error}</Alert>}
+
+      <div className="mb-5 overflow-hidden rounded-lg border">
+        {pipelines.map((pipeline) => (
+          <div
+            key={pipeline.id}
+            className="flex items-center justify-between gap-3 border-b px-3 py-2.5 text-sm last:border-0"
+          >
+            <div className="min-w-0">
+              <strong className="block truncate font-medium">{pipeline.name}</strong>
+              <span className="note">
+                {pipeline.branchId === null
+                  ? 'Toda la empresa'
+                  : (branches.find((b) => b.id === pipeline.branchId)?.name ?? 'Su sede')}
+                {' · '}
+                {pipeline.visibleRoles.length === 0
+                  ? 'Todos los perfiles'
+                  : pipeline.visibleRoles.map((r) => ROLE_LABEL[r] ?? r).join(', ')}
+              </span>
+            </div>
+            {!pipeline.isDefault && can('ADMIN', 'DIRECTOR', 'COORDINATOR', 'MANAGER') && (
+              <Button
+                variant="outline"
+                size="sm"
+                loading={busy}
+                onClick={() => void retirar(pipeline)}
+                aria-label={`Retirar ${pipeline.name}`}
+              >
+                <Trash2 />
+              </Button>
+            )}
+          </div>
+        ))}
+      </div>
+
+      <SectionHeading light="Nuevo" strong="embudo" as="h3" className="mb-3" />
+
+      <div className="grid gap-4 sm:grid-cols-2">
+        <Field
+          label="Nombre"
+          value={nombre}
+          onChange={(e) => setNombre(e.target.value)}
+          placeholder="Captación Cañaveral"
+        />
+        {seesAll && (
+          <SelectField
+            label="Sede"
+            hint="Sin sede queda disponible para toda la empresa."
+            value={sede}
+            onChange={(e) => setSede(e.target.value)}
+          >
+            <option value="">Toda la empresa</option>
+            {branches.map((branch) => (
+              <option key={branch.id} value={branch.id}>
+                {branch.name}
+              </option>
+            ))}
+          </SelectField>
+        )}
+      </div>
+
+      <div className="mt-4">
+        <span className="micro-label mb-2 block text-muted-foreground">
+          Quién lo ve
+        </span>
+        <div className="grid gap-2 sm:grid-cols-2">
+          {PERFILES.map((rol) => (
+            <Casilla
+              key={rol}
+              label={ROLE_LABEL[rol] ?? rol}
+              checked={perfiles.includes(rol)}
+              onChange={() => alternar(rol)}
+            />
+          ))}
+        </div>
+        <p className="note mt-2">
+          Sin marcar ninguno, lo ve todo el mundo de la sede.
+        </p>
+      </div>
+
+      <div className="mt-6 flex justify-end gap-2">
+        <Button variant="outline" onClick={onClose}>
+          Cerrar
+        </Button>
+        <Button
+          loading={busy}
+          disabled={nombre.trim().length < 2}
+          onClick={() => void crear()}
+        >
+          Crear embudo
+        </Button>
+      </div>
+    </Modal>
   );
 }

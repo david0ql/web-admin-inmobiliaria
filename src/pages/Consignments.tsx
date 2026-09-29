@@ -11,6 +11,7 @@ import {
 } from '../lib/api';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import {
   Alert,
@@ -118,7 +119,12 @@ export function Consignments() {
         eyebrow="Captación"
         title="Solicitudes de consignación"
         actions={
-          pending > 0 && <Badge tone="amber">{number(pending)} sin revisar</Badge>
+          <>
+            <FiltroSede />
+            {pending > 0 && (
+              <Badge tone="amber">{number(pending)} sin revisar</Badge>
+            )}
+          </>
         }
       />
 

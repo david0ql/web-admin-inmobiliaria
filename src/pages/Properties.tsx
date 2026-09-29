@@ -10,6 +10,7 @@ import {
 } from '../lib/api';
 import { useDebounced, useFetch } from '../lib/useFetch';
 import { useAuth } from '../lib/auth';
+import { FiltroSede } from '../components/FiltroSede';
 import { PageHeader } from '../components/Shell';
 import {
   Badge,
@@ -136,6 +137,8 @@ export function Properties() {
         title="Inmuebles"
         actions={
           <>
+            <FiltroSede />
+          <>
             <div className="flex gap-1.5">
               <button
                 type="button"
@@ -155,6 +158,7 @@ export function Properties() {
             {can('ADMIN', 'MANAGER', 'AGENT') && (
               <Button onClick={() => navigate('/inmuebles/nuevo')}>Nuevo inmueble</Button>
             )}
+          </>
           </>
         }
       />
