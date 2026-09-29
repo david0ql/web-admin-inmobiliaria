@@ -661,6 +661,14 @@ export interface UnitType {
   areaMin: string | null;
   areaMax: string | null;
   builtArea: string | null;
+  /**
+   * La economía escrita a mano, para vender obra nueva sin dar de alta las
+   * ciento veinte fichas de una torre. En blanco, se deriva de las unidades.
+   */
+  priceFrom: string | null;
+  priceTo: string | null;
+  unitsTotal: number | null;
+  unitsAvailable: number | null;
   position: number;
 }
 

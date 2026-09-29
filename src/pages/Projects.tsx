@@ -240,10 +240,20 @@ export function ProjectForm({
     [],
   );
 
+  /*
+    Lo que se da de alta a partir de ahora es OBRA NUEVA.
+
+    El formulario abria en "conjunto ya entregado", que era lo correcto cuando
+    los 57 registros de la base eran edificios de segunda mano heredados de
+    WASI. La agencia empieza a vender sobre planos, y lo que se cree a mano de
+    aqui en adelante sera casi siempre un proyecto en construccion: ese es el
+    valor que ahorra clics y el que evita el error de dejarse el que venia
+    puesto. Editar uno existente conserva el suyo.
+  */
   const [form, setForm] = useState({
     name: existing?.name ?? '',
-    kind: existing?.kind ?? ('COMPLEX' as FamilyKind),
-    status: existing?.status ?? ('DELIVERED' as FamilyStatus),
+    kind: existing?.kind ?? ('PROJECT' as FamilyKind),
+    status: existing?.status ?? ('UNDER_CONSTRUCTION' as FamilyStatus),
     developer: existing?.developer ?? '',
     cityId: existing?.cityId ? String(existing.cityId) : '',
     zoneId: existing?.zoneId ? String(existing.zoneId) : '',

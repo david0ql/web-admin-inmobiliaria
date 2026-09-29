@@ -17,13 +17,14 @@ import {
   Field,
   Loading,
   Modal,
+  SectionHeading,
   SelectField,
-  Table,
   TBody,
-  Td,
-  Th,
   THead,
+  Table,
+  Td,
   TextareaField,
+  Th,
   Tr,
 } from '../components/ui';
 import { area, moneyShort, number } from '../lib/format';
@@ -490,6 +491,10 @@ function UnitTypeForm({
     areaMin: '',
     areaMax: '',
     builtArea: '',
+    priceFrom: '',
+    priceTo: '',
+    unitsTotal: '',
+    unitsAvailable: '',
   });
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -508,6 +513,10 @@ function UnitTypeForm({
       areaMin: existing.areaMin ?? '',
       areaMax: existing.areaMax ?? '',
       builtArea: existing.builtArea ?? '',
+      priceFrom: existing.priceFrom ?? '',
+      priceTo: existing.priceTo ?? '',
+      unitsTotal: existing.unitsTotal?.toString() ?? '',
+      unitsAvailable: existing.unitsAvailable?.toString() ?? '',
     });
   }, [existing]);
 
@@ -528,6 +537,10 @@ function UnitTypeForm({
       areaMin: numeroOpcional(form.areaMin),
       areaMax: numeroOpcional(form.areaMax),
       builtArea: numeroOpcional(form.builtArea),
+      priceFrom: numeroOpcional(form.priceFrom),
+      priceTo: numeroOpcional(form.priceTo),
+      unitsTotal: numeroOpcional(form.unitsTotal),
+      unitsAvailable: numeroOpcional(form.unitsAvailable),
     };
     try {
       if (unitTypeId) await api.patch(`/unit-types/${unitTypeId}`, payload);
@@ -642,6 +655,55 @@ function UnitTypeForm({
             value={form.builtArea}
             onChange={(e) => set('builtArea', e.target.value)}
           />
+        </div>
+
+        {/*
+          LA VENTA, escrita a mano.
+
+          Es lo que permite anunciar obra nueva sin dar de alta las ciento
+          veinte fichas de inmueble de una torre. Se deja en blanco para los
+          conjuntos ya entregados, donde el precio y las unidades salen de los
+          inmuebles que existen de verdad.
+        */}
+        <div className="mt-5 rounded-lg border bg-secondary/40 p-4">
+          <SectionHeading light="La" strong="venta" as="h3" className="mb-1" />
+          <p className="note mb-3">
+            Para obra nueva: se anuncia la tipología sin dar de alta cada
+            apartamento. En blanco, se calcula a partir de las unidades que
+            existan.
+          </p>
+          <div className="grid gap-4 grid-cols-[repeat(auto-fit,minmax(150px,1fr))]">
+            <Field
+              label="Precio desde"
+              type="number"
+              min={0}
+              step="1000"
+              value={form.priceFrom}
+              onChange={(e) => set('priceFrom', e.target.value)}
+            />
+            <Field
+              label="Precio hasta"
+              type="number"
+              min={0}
+              step="1000"
+              value={form.priceTo}
+              onChange={(e) => set('priceTo', e.target.value)}
+            />
+            <Field
+              label="Unidades"
+              type="number"
+              min={0}
+              value={form.unitsTotal}
+              onChange={(e) => set('unitsTotal', e.target.value)}
+            />
+            <Field
+              label="Disponibles"
+              type="number"
+              min={0}
+              value={form.unitsAvailable}
+              onChange={(e) => set('unitsAvailable', e.target.value)}
+            />
+          </div>
         </div>
 
         {/* El rango existe porque una tipologia real no es exacta: el mismo Tipo A
