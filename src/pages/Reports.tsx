@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom';
 import {
   api,
   type AgentWorkload,
@@ -35,17 +36,32 @@ interface FunnelRow {
   avg_days_in_stage: string;
 }
 
+/** Una fila del ranking de corazones. */
+interface MostLiked {
+  property: {
+    id: string;
+    code: string;
+    title: string;
+    city: { name: string } | null;
+    zone: { name: string } | null;
+    salePrice: number | null;
+    rentPrice: number | null;
+  };
+  likes: number;
+}
+
 interface ReportsData {
   byCity: CityInventory[];
   byType: TypeInventory[];
   funnel: FunnelRow[];
   sources: SourceRow[];
   agents: AgentWorkload[];
+  mostLiked: MostLiked[];
 }
 
 export function Reports() {
   const { data, error, loading, reload } = useFetch<ReportsData>(async (signal) => {
-    const [inventory, funnel, sources, agents] = await Promise.all([
+    const [inventory, funnel, sources, agents, mostLiked] = await Promise.all([
       api.get<{ byCity: CityInventory[]; byType: TypeInventory[] }>(
         '/analytics/inventory',
         undefined,
@@ -54,8 +70,15 @@ export function Reports() {
       api.get<FunnelRow[]>('/analytics/funnel', undefined, signal),
       api.get<SourceRow[]>('/analytics/sources', undefined, signal),
       api.get<AgentWorkload[]>('/analytics/agents', undefined, signal).catch(() => []),
+      /*
+        Tolerante a fallo como la carga por asesor: el ranking es el extra de la
+        pantalla, y que falte no es motivo para dejar sin informes a nadie.
+      */
+      api
+        .get<MostLiked[]>('/analytics/most-liked', { limit: 10 }, signal)
+        .catch(() => []),
     ]);
-    return { ...inventory, funnel, sources, agents };
+    return { ...inventory, funnel, sources, agents, mostLiked };
   }, []);
 
   const maxFunnel = Math.max(1, ...(data?.funnel.map((row) => row.total) ?? [1]));
@@ -199,6 +222,64 @@ export function Reports() {
                 </Table>
               </Card>
             </div>
+
+            {/*
+              Lo que la gente guarda.
+
+              Es la unica señal de interes que el visitante da por su cuenta, sin
+              que nadie le pregunte: una visita a la ficha puede ser un rebote de
+              Google, un corazon es una intencion. Sirve para dos cosas opuestas
+              y las dos utiles — que sacar en portada, y que inmueble gusta a
+              mucha gente y aun no se ha vendido, que normalmente es el precio.
+
+              Solo se pinta si hay algo: una tabla vacia con un titulo bonito
+              hace creer que la funcion esta rota.
+            */}
+            {data.mostLiked.length > 0 && (
+              <Card
+                title="Los más guardados"
+                action={
+                  <span className="note">
+                    Qué inmuebles marcan con el corazón en la web
+                  </span>
+                }
+                flush
+              >
+                <Table>
+                  <THead>
+                    <tr>
+                      <Th>Inmueble</Th>
+                      <Th>Ubicación</Th>
+                      <Th num>Precio</Th>
+                      <Th num>Me gusta</Th>
+                    </tr>
+                  </THead>
+                  <TBody>
+                    {data.mostLiked.map((row) => (
+                      <Tr key={row.property.id}>
+                        <Td>
+                          <Link to={`/inmuebles/${row.property.id}`}>
+                            {row.property.title}
+                          </Link>
+                          <div className="note">{row.property.code}</div>
+                        </Td>
+                        <Td className="note">
+                          {[row.property.zone?.name, row.property.city?.name]
+                            .filter(Boolean)
+                            .join(' · ') || '—'}
+                        </Td>
+                        <Td num>
+                          {moneyShort(
+                            row.property.salePrice ?? row.property.rentPrice ?? 0,
+                          )}
+                        </Td>
+                        <Td num>{number(row.likes)}</Td>
+                      </Tr>
+                    ))}
+                  </TBody>
+                </Table>
+              </Card>
+            )}
 
             {data.agents.length > 0 && (
               <Card title="Carga por asesor" flush>
